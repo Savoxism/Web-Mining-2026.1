@@ -156,6 +156,8 @@ def main() -> None:
     w = Weights(beta=best["beta"], gamma=best["gamma"], mu=best["mu"], inject=True)
     w_plain = Weights(inject=False, static=True)
     lg = LexGraph(args.bi, args.ce)
+    from lexgraph.versions import VersionIndex
+    lg.versions = VersionIndex("data/kg/amendments.parquet")  # as in the demo: amendments in force at t
     llm = OpenAI(base_url=args.llm_url, api_key="EMPTY")
     if not args.no_fact_check:  # Qwen3-4B checks each change fact (non-thinking), as in the demo
         set_fact_checker(llm, args.llm_model, thinking=False)
