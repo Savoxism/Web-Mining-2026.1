@@ -26,7 +26,7 @@ while true; do
   printf "  %-26s " "Qwen3-32B download"; bar $((have / 1000000)) 65530 "$C"; printf "  %s / 65.5 GB\n" "$(awk -v h="$have" "BEGIN{printf \"%.1f\", h/1e9}")"
   srv="${R}down${N}"; curl -s -m 2 localhost:8300/v1/models > /dev/null && srv="${G}ready${N}"
   printf "  %-26s %s\n" "Qwen3-32B server (8300)" "$srv"
-  line=$(tr '\r' '\n' < "$S/rejudge.log" 2>/dev/null | grep -a "rejudge:" | tail -1)
+  line=$( { tr '\r' '\n' < "$S/rejudge.log"; } 2>/dev/null | grep -a "rejudge:" | tail -1)
   d=$(echo "$line" | grep -oE '[0-9]+/[0-9]+' | head -1)
   printf "  %-26s " "Second judge"; bar "${d%/*}" "${d#*/}" "$G"; printf "  %s\n" "${d:-waiting}"
   echo
