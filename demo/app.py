@@ -19,7 +19,7 @@ import streamlit.components.v1 as components
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
-from lexgraph.llm import answer, build_context  # noqa: E402
+from lexgraph.llm import answer, build_context, set_fact_checker  # noqa: E402
 from lexgraph.pipeline import LexGraph, Weights  # noqa: E402
 from lexgraph.versions import VersionIndex, money_change, word_diff_html  # noqa: E402
 
@@ -51,7 +51,9 @@ def load():
 @st.cache_resource
 def llm_client():
     from openai import OpenAI
-    return OpenAI(base_url=LLM_URL, api_key="EMPTY")
+    client = OpenAI(base_url=LLM_URL, api_key="EMPTY")
+    set_fact_checker(client, LLM_MODEL, thinking=False)  # Qwen3-4B confirms each "law changed" fact
+    return client
 
 
 def badge(stale: bool) -> str:
@@ -114,6 +116,7 @@ with st.sidebar.expander("Trọng số re-ranking"):
 st.sidebar.caption(f"Bi-encoder: `{BI}`  \nCross-encoder: `{CE}`  \nLLM: `{LLM_MODEL}` @ {LLM_URL}")
 
 lg = load()
+llm_client()
 
 tab_qa, tab_tt, tab_kg = st.tabs(["Hỏi đáp", "⏳ Time-travel", "Knowledge graph"])
 

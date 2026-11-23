@@ -34,7 +34,7 @@ import pandas as pd
 from openai import OpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from lexgraph.llm import SYSTEM_PROMPT, answer, build_context  # noqa: E402
+from lexgraph.llm import SYSTEM_PROMPT, answer, build_context, set_fact_checker  # noqa: E402
 from lexgraph.pipeline import LexGraph, Weights  # noqa: E402
 
 OUT_OF_SCOPE = [
@@ -144,6 +144,7 @@ def main() -> None:
     ap.add_argument("--judge-url", default="http://127.0.0.1:8200/v1")
     ap.add_argument("--judge-model", default="gpt-oss-120b")
     ap.add_argument("--workers", type=int, default=32)
+    ap.add_argument("--no-fact-check", action="store_true")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     out = Path(args.out)
@@ -156,6 +157,8 @@ def main() -> None:
     w_plain = Weights(inject=False, static=True)
     lg = LexGraph(args.bi, args.ce)
     llm = OpenAI(base_url=args.llm_url, api_key="EMPTY")
+    if not args.no_fact_check:  # Qwen3-4B checks each change fact (non-thinking), as in the demo
+        set_fact_checker(llm, args.llm_model, thinking=False)
     judge = OpenAI(base_url=args.judge_url, api_key="EMPTY")
 
     # ---------------- question sample

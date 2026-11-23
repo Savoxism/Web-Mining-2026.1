@@ -17,7 +17,7 @@ FACTS_HEADER = "THAY ĐỔI ĐÃ XÁC MINH"
 # (scripts/eval/tune_notice_gate.py). A wrong version alignment gives an unrelated new clause and a low CE(q, new).
 NOTICE_DELTA = float(os.environ.get("LEXGRAPH_NOTICE_DELTA", "inf"))
 # the clause counts as changed when the fine amounts differ or the token Jaccard of old vs new clause is below this
-NOTICE_JACCARD = float(os.environ.get("LEXGRAPH_NOTICE_JACCARD", "0.6"))
+NOTICE_JACCARD = float(os.environ.get("LEXGRAPH_NOTICE_JACCARD", "0.85"))  # tuned with the LLM check (validation)
 
 # optional second check by the LLM itself: does the answer to *this question* differ between the two clauses?
 CHECK_PROMPT = """Câu hỏi: {q}
