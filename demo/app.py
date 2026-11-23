@@ -103,14 +103,11 @@ st.sidebar.title("⚖️ LexGraph-VN")
 st.sidebar.caption("Trợ lý hỏi đáp pháp luật Việt Nam có theo dõi hiệu lực theo thời gian")
 t_q = pd.Timestamp(st.sidebar.date_input("Thời điểm hỏi", value=date.today(), format="DD/MM/YYYY"))
 time_aware = st.sidebar.toggle("Xét hiệu lực theo thời gian", value=True)
-graph_on = st.sidebar.toggle("Tín hiệu đồ thị (PageRank, lan truyền)", value=True)
 use_ce = st.sidebar.toggle("Cross-encoder re-ranking", value=True)
 use_llm = st.sidebar.toggle("Sinh câu trả lời bằng Qwen3-4B", value=True)
 thinking = st.sidebar.toggle("Qwen3 thinking mode", value=False)
 with st.sidebar.expander("Trọng số re-ranking"):
-    beta = st.slider("β (PageRank)", 0.0, 2.0, 0.25, 0.05)
-    gamma = st.slider("γ (phạt văn bản hết hiệu lực)", 0.0, 10.0, 4.0, 0.5)
-    mu = st.slider("μ (lan truyền đồ thị)", 0.0, 3.0, 0.5, 0.1)
+    gamma = st.slider("γ (phạt văn bản hết hiệu lực)", 0.0, 10.0, 2.0, 0.5)
     tau = st.slider("τ (ngưỡng khớp phiên bản)", 0.5, 0.95, 0.80, 0.01)
     k_rerank = st.slider("Số ứng viên re-rank", 10, 100, 30, 5)
     n_sources = st.slider("Số trích đoạn đưa vào LLM", 2, 10, 5, 1)
@@ -165,8 +162,7 @@ with tab_qa:
     go = st.button("Hỏi", type="primary")
 
     if go and question.strip():
-        w = Weights(beta=beta if graph_on else 0.0, gamma=gamma if time_aware else 0.0, mu=mu if graph_on else 0.0,
-                    tau=tau, use_ce=use_ce, inject=time_aware, static=not time_aware)
+        w = Weights(beta=0.0, gamma=gamma if time_aware else 0.0, mu=0.0, tau=tau, use_ce=use_ce, inject=time_aware, static=not time_aware)
         with st.spinner("Đang truy hồi và xếp hạng…"):
             res = lg.search(question, t_q, w, k_rerank=k_rerank, top=20)
         st.session_state["last"] = (question, res, t_q, time_aware)
@@ -215,8 +211,7 @@ with tab_qa:
                            + ("🆕 văn bản mới (crawl vbpl.vn)" if r.source == "crawl" else str(r.source))
                            + (f"  \nLý do: {r.stale_reason}" if r.stale and ta else ""))
                 st.text(str(r.text)[:3000])
-                st.caption(f"bi-encoder {r.bi_score:.3f} · cross-encoder {r.ce_score:.2f} · PageRank z {r.pagerank_z:.2f} · "
-                           f"lan truyền {r.propagation:.2f}")
+                st.caption(f"bi-encoder {r.bi_score:.3f} · cross-encoder {r.ce_score:.2f}")
 
         st.subheader("Lịch sử phiên bản")
         shown = []
@@ -248,7 +243,7 @@ with tab_tt:
              c[2].date_input("Mốc 3", value=date.today(), format="DD/MM/YYYY", key="d3")]
     tt_llm = st.toggle("Sinh câu trả lời ở mỗi mốc (Qwen3-4B)", value=True, key="tt_llm")
     if st.button("So sánh theo thời gian", type="primary"):
-        w = Weights(beta=beta, gamma=gamma, mu=mu, tau=tau, use_ce=True, inject=True)
+        w = Weights(beta=0.0, gamma=gamma, mu=0.0, tau=tau, use_ce=True, inject=True)
         cols = st.columns(3)
         for col, dte in zip(cols, dates):
             tq = pd.Timestamp(dte)
