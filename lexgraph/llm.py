@@ -72,6 +72,34 @@ def _body_tokens(text: str) -> set:
     return set(TOK.findall(" ".join(lines[1:]).lower())) if len(lines) > 1 else set(TOK.findall(str(text).lower()))
 
 
+def apply_phrase_ops(lg, aid: str, text: str, t) -> tuple[str, list[str]]:
+    """Apply the phrase replacements ("Thay cụm từ A bằng B tại khoản k Điều n") in force at t to an article text,
+    inside the target clause only. Returns the updated text and short notes on what was applied."""
+    versions = getattr(lg, "versions", None)
+    if versions is None or not aid or t is None or "phrase_old" not in versions.ops.columns:
+        return text, []
+    am = versions.amendments(aid, t)
+    am = am[(am.op == "Thay cụm từ") & am.phrase_old.notna()].sort_values("amend_from")
+    notes = []
+    for a in am.itertuples(index=False):
+        lines = text.split("\n")
+        clause = _s(a.target_clause)
+        inside, changed = clause == "", False
+        for k, line in enumerate(lines):
+            m = re.match(r"^(\d+[a-zđ]?)\.\s", line)
+            if m and clause:
+                inside = m.group(1) == clause
+            if inside and a.phrase_old in line:
+                lines[k] = line.replace(a.phrase_old, a.phrase_new)
+                changed = True
+        if changed:
+            text = "\n".join(lines)
+            where = f"khoản {clause}" if clause else "điều này"
+            notes.append(f"[{where} đã được sửa bởi {a.amend_num}, hiệu lực từ {_fmt_date(a.amend_from)}: "
+                         f"\"{a.phrase_old}\" → \"{a.phrase_new}\"]")
+    return text, notes
+
+
 def change_fact(lg, old: dict, q_vec, q_exp: str, t: pd.Timestamp) -> dict | None:
     """Does the clause the question is about really differ between the old article and its successor?
 
@@ -99,6 +127,9 @@ def change_fact(lg, old: dict, q_vec, q_exp: str, t: pd.Timestamp) -> dict | Non
         new_row = succ_rows[0]
     new = lg.corpus.iloc[new_row]
     new_clause = str(new.text)
+    # the old rule as it stood just before the successor took effect (phrase replacements applied)
+    if pd.notna(new.valid_from):
+        old_clause, _ = apply_phrase_ops(lg, _s(old.get("aid")), old_clause, pd.Timestamp(new.valid_from) - pd.Timedelta(days=1))
     mo, mn = MONEY.findall(old_clause), MONEY.findall(new_clause)
     a, b = _body_tokens(old_clause), _body_tokens(new_clause)
     jac = len(a & b) / max(1, len(a | b))
@@ -190,9 +221,13 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
         else:
             text = text[:max_chars]
         versions = getattr(lg, "versions", None)
+        if time_aware and versions is not None and not r.get("stale") and aid:
+            text, notes = apply_phrase_ops(lg, aid, text, t)
+            if notes:
+                text += "\n" + "\n".join(notes)
         if time_aware and versions is not None and not r.get("stale") and aid and q_vec is not None:
             am = versions.amendments(aid, t)
-            am = am[am.new_text.notna()]
+            am = am[am.new_text.notna() & (am.op != "Thay cụm từ")]  # phrase replacements are applied above
             # only amendments of the clauses shown (or of the whole article)
             shown = set(re.findall(r"(?m)^(\d+[a-zđ]?)\.\s", text))
             if shown:
