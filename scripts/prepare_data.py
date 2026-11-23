@@ -34,6 +34,8 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--val-frac", type=float, default=0.1)
     ap.add_argument("--test-frac", type=float, default=0.1)
+    ap.add_argument("--group-by-text", action="store_true",
+                    help="split by normalised question text so duplicate questions never cross splits")
     args = ap.parse_args()
 
     out = Path(args.out)
@@ -86,15 +88,26 @@ def main() -> None:
         .reset_index()
     )
 
-    # ---------- Split by qid ----------
+    # ---------- Split by qid (or by normalised question text, so duplicates stay together) ----------
     rng = np.random.default_rng(args.seed)
-    perm = rng.permutation(len(queries))
-    n_test = int(len(queries) * args.test_frac)
-    n_val = int(len(queries) * args.val_frac)
-    split = np.full(len(queries), "train", dtype=object)
-    split[perm[:n_test]] = "test"
-    split[perm[n_test : n_test + n_val]] = "val"
-    queries["split"] = split
+    if args.group_by_text:
+        key = queries["query"].str.lower().str.replace(r"\W+", " ", regex=True).str.strip()
+        groups = key.unique()
+        perm = rng.permutation(len(groups))
+        n_test = int(len(groups) * args.test_frac)
+        n_val = int(len(groups) * args.val_frac)
+        gsplit = np.full(len(groups), "train", dtype=object)
+        gsplit[perm[:n_test]] = "test"
+        gsplit[perm[n_test : n_test + n_val]] = "val"
+        queries["split"] = key.map(dict(zip(groups, gsplit))).values
+    else:
+        perm = rng.permutation(len(queries))
+        n_test = int(len(queries) * args.test_frac)
+        n_val = int(len(queries) * args.val_frac)
+        split = np.full(len(queries), "train", dtype=object)
+        split[perm[:n_test]] = "test"
+        split[perm[n_test : n_test + n_val]] = "val"
+        queries["split"] = split
 
     for name in ["train", "val", "test"]:
         part = queries[queries.split == name].drop(columns="split").reset_index(drop=True)
