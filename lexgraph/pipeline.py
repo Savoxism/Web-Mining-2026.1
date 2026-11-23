@@ -167,7 +167,8 @@ class LexGraph:
         if len(chunks) <= 1:
             return chunks[0] if chunks else fallback
         if self.ce is not None and query_text:  # the cross-encoder matches legal wording more precisely
-            sims = np.asarray(self.ce.predict([(query_text, c) for c in chunks], batch_size=32, show_progress_bar=False))
+            sims = np.asarray(self.ce.predict([(query_text, c) for c in chunks], batch_size=32, show_progress_bar=False,
+                                              activation_fn=torch.nn.Identity()))  # logits: no saturation
         else:
             emb = self.bi.encode(chunks, batch_size=32, normalize_embeddings=True, convert_to_tensor=True)
             sims = (emb @ q_vec).float().cpu().numpy()
