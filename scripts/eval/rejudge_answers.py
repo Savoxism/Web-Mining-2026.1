@@ -74,9 +74,11 @@ def main() -> None:
         it["changed2"] = parse_json(out, ["changed"])["changed"]
 
     temporal = [it for it in A if it["kind"] == "temporal"]
+    from tqdm import tqdm
+    jobs = [(jqa, (it, s)) for it in in_scope for s in SETTINGS] + [(jch, it) for it in temporal]
     with ThreadPoolExecutor(args.workers) as ex:
-        list(ex.map(jqa, [(it, s) for it in in_scope for s in SETTINGS]))
-        list(ex.map(jch, temporal))
+        for _ in tqdm(ex.map(lambda j: j[0](j[1]), jobs), total=len(jobs), desc="rejudge", mininterval=5):
+            pass
 
     def has_notice(a):
         return ("thay đổi pháp luật" in a.lower()) or ("⚠" in a)
