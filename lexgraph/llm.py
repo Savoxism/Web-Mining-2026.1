@@ -28,7 +28,8 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
     """Pick sources and format them. Time-aware mode prefers valid articles and adds successor articles."""
     rows = results.to_dict("records")
     from lexgraph.query import expand_query
-    q_vec = lg.encode_queries([expand_query(query)])[0] if query else None
+    q_exp = expand_query(query) if query else None
+    q_vec = lg.encode_queries([q_exp])[0] if query else None
     if time_aware:
         valid = [r for r in rows if not r["stale"]][:n_sources]
         chosen = list(valid)
@@ -77,7 +78,7 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
             head += f"\nTình trạng: {note}"
         text = str(r.get("text", ""))
         if q_vec is not None and _s(r.get("source")) == "qa":
-            text = lg.relevant_text(q_vec, aid, text, per_chunk_chars=max_chars)[: 2 * max_chars + 10]
+            text = lg.relevant_text(q_vec, aid, text, per_chunk_chars=max_chars, query_text=q_exp)[: 2 * max_chars + 10]
         else:
             text = text[:max_chars]
         versions = getattr(lg, "versions", None)

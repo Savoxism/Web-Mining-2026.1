@@ -158,7 +158,7 @@ class LexGraph:
 
     # ------------------------------------------------------------------ retrieval
     def relevant_text(self, q_vec: torch.Tensor, aid: str, fallback: str, n: int = 2, max_words: int = 300,
-                      per_chunk_chars: int = 1800) -> str:
+                      per_chunk_chars: int = 1800, query_text: str | None = None) -> str:
         """Most query-relevant clauses of the full article (falls back to the passage text)."""
         full = self.full_text.get(aid) if isinstance(aid, str) else None
         if not full or len(full) <= len(fallback) * 1.05:
@@ -166,8 +166,11 @@ class LexGraph:
         chunks = chunk_article(full, max_words)
         if len(chunks) <= 1:
             return chunks[0] if chunks else fallback
-        emb = self.bi.encode(chunks, batch_size=32, normalize_embeddings=True, convert_to_tensor=True)
-        sims = (emb @ q_vec).float().cpu().numpy()
+        if self.ce is not None and query_text:  # the cross-encoder matches legal wording more precisely
+            sims = np.asarray(self.ce.predict([(query_text, c) for c in chunks], batch_size=32, show_progress_bar=False))
+        else:
+            emb = self.bi.encode(chunks, batch_size=32, normalize_embeddings=True, convert_to_tensor=True)
+            sims = (emb @ q_vec).float().cpu().numpy()
         top = np.argsort(-sims)[:n]  # most relevant clauses first, each kept short
         return "\n…\n".join(chunks[i][:per_chunk_chars] for i in top)
 
