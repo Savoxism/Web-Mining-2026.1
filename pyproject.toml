@@ -1,0 +1,19 @@
+[project]
+name = "lexgraph-vn"
+version = "0.1.0"
+description = "Time-aware Vietnamese legal question answering"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pandas>=2.2",
+    "pyarrow>=17",
+    "numpy>=1.26",
+    "bm25s>=0.2",
+    "pyvi>=0.1.1",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dense = [
+    "torch>=2.4",
+    "sentence-transformers>=3.3",
+]
