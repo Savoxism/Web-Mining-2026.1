@@ -62,7 +62,9 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
     for k, r in enumerate(chosen, start=1):
         doc = _s(r.get("so_ky_hieu")) or "văn bản chưa xác định"
         title = _s(r.get("title"))[:160]
-        head = f"[{k}] {doc} — {title}"
+        aid = _s(r.get("aid"))
+        art = f", Điều {aid.split('#')[-1].split('~')[0]}" if "#" in aid else ""
+        head = f"[{k}] {doc}{art} — {title}"
         if time_aware:
             if r.get("stale"):
                 note = f"ĐÃ HẾT HIỆU LỰC / BỊ THAY THẾ tại {_fmt_date(t)}"
