@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from lexgraph.query import expand_query
 from lexgraph.temporal import chunk_article, in_force
 
 GRAPH_TYPES = {"guides", "based_on", "cites"}
@@ -31,6 +32,7 @@ class Weights:
     use_ce: bool = True
     inject: bool = True
     static: bool = False   # retrieve only from the original QA corpus (no successor articles)
+    expand: bool = True    # query normalisation with the legal glossary (demo; off in the benchmark evaluation)
 
 
 class LexGraph:
@@ -222,6 +224,7 @@ class LexGraph:
     # ------------------------------------------------------------------ single query (demo)
     def search(self, query: str, t: pd.Timestamp, w: Weights, k_retrieve: int = 100, k_rerank: int = 30,
                top: int = 10) -> pd.DataFrame:
+        query = expand_query(query) if w.expand else query
         q = self.encode_queries([query])
         ti, ts = self.retrieve(q, k=k_retrieve * (3 if w.static else 1))
         if w.static:

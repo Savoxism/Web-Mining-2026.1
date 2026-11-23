@@ -27,7 +27,8 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
                   max_chars: int = 1800, query: str | None = None) -> tuple[str, list[dict]]:
     """Pick sources and format them. Time-aware mode prefers valid articles and adds successor articles."""
     rows = results.to_dict("records")
-    q_vec = lg.encode_queries([query])[0] if query else None
+    from lexgraph.query import expand_query
+    q_vec = lg.encode_queries([expand_query(query)])[0] if query else None
     if time_aware:
         valid = [r for r in rows if not r["stale"]][:n_sources]
         chosen = list(valid)

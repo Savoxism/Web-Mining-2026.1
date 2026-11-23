@@ -252,7 +252,8 @@ with tab_tt:
                 st.markdown(f"#### {fmt_date(tq)}")
                 with st.spinner("Đang truy hồi…"):
                     r = lg.search(tt_q, tq, w, k_rerank=k_rerank, top=20)
-                valid = r[~r.stale].assign(_a=r.aid.astype(str).str.split("~").str[0]).drop_duplicates("_a").head(3)
+                valid = r[~r.stale & r.so_ky_hieu.notna()]
+                valid = valid.assign(_a=valid.aid.astype(str).str.split("~").str[0]).drop_duplicates("_a").head(3)
                 for x in valid.itertuples():
                     art = str(x.aid).split("#")[-1].split("~")[0] if isinstance(x.aid, str) else "?"
                     st.markdown(f"🟢 **{x.so_ky_hieu}**, Điều {art}  \n<span style='color:gray;font-size:0.85em'>"
