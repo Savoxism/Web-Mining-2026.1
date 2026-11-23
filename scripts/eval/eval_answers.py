@@ -265,7 +265,7 @@ def main() -> None:
                "n_temporal_changed": int(sum(it["changed"] for it in temporal)), "successors": lg.succ_version}
 
     # ---------------- alignment audit
-    succ = pd.read_parquet(Path("data/kg/temporal") / os.environ.get("LEXGRAPH_SUCCESSORS", "successors.parquet"))
+    succ = pd.read_parquet(Path("data/kg/temporal") / lg.succ_file)
     cand = succ[succ.accept] if lg.succ_version == "v2" else succ[(succ["rank"] == 0) & ((succ.sim >= w.tau) | succ.explicit)]
     cand = cand[cand.succ_aid.map(lambda a: bool(lg.rows_of_aid.get(a)))]
     sample = cand.sample(min(args.n_align, len(cand)), random_state=42)

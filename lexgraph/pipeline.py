@@ -63,7 +63,10 @@ class LexGraph:
 
         # successor candidates of QA passages
         # successors.parquet: v1 (cosine >= tau); successors_v2.parquet: classifier + one-to-one matching (`accept`)
-        succ_file = os.environ.get("LEXGRAPH_SUCCESSORS", "successors.parquet")
+        # default: v2 when it has been built (better downstream: test MRR@10 0.662 -> 0.671, Stale@10 0.141 -> 0.125)
+        succ_file = os.environ.get("LEXGRAPH_SUCCESSORS") or (
+            "successors_v2.parquet" if (td / "successors_v2.parquet").exists() else "successors.parquet")
+        self.succ_file = succ_file
         succ = pd.read_parquet(td / succ_file)
         self.succ_version = "v2" if "accept" in succ.columns else "v1"
         docs = pd.read_parquet(td / "docs_temporal.parquet").set_index("id")
