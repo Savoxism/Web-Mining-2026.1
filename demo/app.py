@@ -117,7 +117,7 @@ tab_qa, tab_kg = st.tabs(["Hỏi đáp", "Knowledge graph"])
 # ------------------------------------------------------------------ QA tab
 with tab_qa:
     st.title("Hỏi đáp pháp luật theo thời gian")
-    c1, c2, _ = st.columns([1, 1, 2])
+    c1, c2, _ = st.columns([1.3, 1.5, 1])
     for col, (label, q) in zip([c1, c2], EXAMPLES.items()):
         if col.button(label, use_container_width=True):
             st.session_state["question"] = q
@@ -149,7 +149,7 @@ with tab_qa:
 
         # change notices: stale results with a successor article
         if ta:
-            changed = res[res.stale & res.successor_aid.notna()].head(3)
+            changed = res[res.stale & res.successor_aid.notna()].drop_duplicates(["aid", "successor_aid"]).head(3)
             for r in changed.itertuples():
                 new_rows = lg.rows_of_aid.get(r.successor_aid, [])
                 if not new_rows:
