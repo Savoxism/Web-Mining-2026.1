@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from lexgraph.query import expand_query
+
 SYSTEM_PROMPT = """Bạn là trợ lý hỏi đáp pháp luật Việt Nam.
 Quy tắc:
 1. Chỉ trả lời dựa trên các trích đoạn văn bản pháp luật được cung cấp. Không dùng kiến thức bên ngoài.
@@ -102,7 +104,7 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
 def answer(client, model: str, question: str, context: str, t: pd.Timestamp, thinking: bool = False,
            max_tokens: int = 1024) -> str:
     user = (f"Thời điểm hỏi: {_fmt_date(t)}\n\nCác trích đoạn văn bản pháp luật:\n{context}\n\n"
-            f"Câu hỏi: {question}")
+            f"Câu hỏi: {expand_query(question)}")
     if "ĐÃ HẾT HIỆU LỰC / BỊ THAY THẾ" in context:
         user += ("\n\nLưu ý: có trích đoạn đã hết hiệu lực hoặc bị thay thế. Trả lời theo quy định còn hiệu lực, "
                  "sau đó BẮT BUỘC thêm mục \"⚠️ Thay đổi pháp luật\" nêu quy định cũ (văn bản, nội dung chính), "
