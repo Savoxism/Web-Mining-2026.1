@@ -36,6 +36,7 @@ def main() -> None:
     ap.add_argument("--val-queries", type=int, default=2000)
     ap.add_argument("--eval-steps", type=int, default=400)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--grad-ckpt", action="store_true", help="gradient checkpointing (saves activation memory)")
     args = ap.parse_args()
 
     world = int(os.environ.get("WORLD_SIZE", "1"))
@@ -89,6 +90,7 @@ def main() -> None:
         report_to="none",
         dataloader_num_workers=2,
         ddp_find_unused_parameters=False,
+        gradient_checkpointing=args.grad_ckpt,
     )
     if rank == 0:
         info = {"world_size": world, "per_device_batch": args.per_device_batch, "grad_accum": args.grad_accum,
