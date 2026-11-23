@@ -15,6 +15,10 @@ Quy tắc:
 5. Trả lời ngắn gọn, rõ ràng, bằng tiếng Việt."""
 
 
+def _s(x) -> str:
+    return "" if x is None or (isinstance(x, float) and x != x) else str(x)
+
+
 def _fmt_date(x) -> str:
     return pd.Timestamp(x).strftime("%d/%m/%Y") if pd.notna(x) else "không rõ"
 
@@ -27,7 +31,7 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
         valid = [r for r in rows if not r["stale"]][:n_sources]
         chosen = list(valid)
         for r in rows[:10]:
-            if r["stale"] and r.get("successor_aid") and len(chosen) < n_sources + 3:
+            if r["stale"] and _s(r.get("successor_aid")) and len(chosen) < n_sources + 3:
                 chosen.append(r)
                 succ_rows = lg.rows_of_aid.get(r["successor_aid"], [])
                 if succ_rows and not any(c.get("aid") == r["successor_aid"] for c in chosen):
@@ -39,21 +43,21 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
 
     blocks, sources = [], []
     for k, r in enumerate(chosen, start=1):
-        doc = r.get("so_ky_hieu") or "không rõ số hiệu"
-        title = (r.get("title") or "")[:160]
+        doc = _s(r.get("so_ky_hieu")) or "văn bản chưa xác định"
+        title = _s(r.get("title"))[:160]
         head = f"[{k}] {doc} — {title}"
         if time_aware:
             if r.get("stale"):
                 note = f"ĐÃ HẾT HIỆU LỰC / BỊ THAY THẾ tại {_fmt_date(t)}"
-                if r.get("successor_doc") is not None:
+                if _s(r.get("successor_doc")):
                     note += f" (được thay thế bởi văn bản {lg.docs.so_ky_hieu.get(r['successor_doc'], r['successor_doc'])})"
             else:
                 note = f"còn hiệu lực tại {_fmt_date(t)} (hiệu lực từ {_fmt_date(r.get('valid_from'))})"
             head += f"\nTình trạng: {note}"
         text = str(r.get("text", ""))[:max_chars]
         blocks.append(f"{head}\n{text}")
-        sources.append({"k": k, "doc": doc, "title": title, "aid": r.get("aid"), "stale": bool(r.get("stale")),
-                        "row": int(r["row"]) if r.get("row") is not None else None})
+        sources.append({"k": k, "doc": doc, "title": title, "aid": _s(r.get("aid")), "stale": bool(r.get("stale")),
+                        "row": int(r["row"]) if _s(r.get("row")) else None})
     return "\n\n".join(blocks), sources
 
 
