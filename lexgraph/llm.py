@@ -32,6 +32,9 @@ Theo quy định mới, câu trả lời cho câu hỏi trên có khác so với
 đối tượng, cơ quan có thẩm quyền hoặc thủ tục)? Nếu quy định mới không nói về nội dung của câu hỏi thì trả lời KHÔNG.
 Chỉ trả lời một từ: CÓ hoặc KHÔNG."""
 _CHECKER = None
+# reverse facts: when no stale article yields a fact, look at the articles in force in the context that *replaced*
+# an older article (version alignment) less than this many days before the question (0 = off)
+NOTICE_REVERSE_DAYS = int(os.environ.get("LEXGRAPH_NOTICE_REVERSE_DAYS", "0"))
 
 
 def set_fact_checker(client, model: str | None, thinking: bool = False) -> None:
@@ -98,6 +101,38 @@ def apply_phrase_ops(lg, aid: str, text: str, t) -> tuple[str, list[str]]:
             notes.append(f"[{where} đã được sửa bởi {a.amend_num}, hiệu lực từ {_fmt_date(a.amend_from)}: "
                          f"\"{a.phrase_old}\" → \"{a.phrase_new}\"]")
     return text, notes
+
+
+def predecessors(lg, aid: str, t, max_days: int) -> list[dict]:
+    """Older articles that `aid` superseded (accepted alignments), with the successor taking effect within max_days
+    before t. Returned as row dicts usable by change_fact (most recent change first)."""
+    if not hasattr(lg, "_pred"):
+        from collections import defaultdict
+        pred = defaultdict(list)
+        for i, recs in lg.succ_by_row.items():
+            for r in recs:
+                ok = bool(r.accept) if lg.succ_version == "v2" else (r.rank == 0 and (r.sim >= 0.80 or r.explicit))
+                if ok:
+                    pred[r.succ_aid].append((i, r.succ_from))
+        lg._pred = pred
+    out = []
+    for i, since in lg._pred.get(aid, []):
+        if pd.isna(since) or since > t or (t - since).days > max_days:
+            continue
+        row = lg.corpus.iloc[i].to_dict()
+        row.update({"row": i, "successor_aid": aid, "stale": True, "_since": since})
+        out.append(row)
+    out.sort(key=lambda r: r["_since"], reverse=True)
+    return out[:3]
+
+
+def _check_fact(f, query, q_exp):
+    if f is not None and f["new_ce"] == f["new_ce"] and f["old_ce"] == f["old_ce"] and f["new_ce"] < f["old_ce"] - NOTICE_DELTA:
+        return None
+    if f is not None and _CHECKER is not None and query and \
+            not llm_says_changed(_CHECKER[0], _CHECKER[1], q_exp, f["old_clause"], f["new_clause"], _CHECKER[2]):
+        return None
+    return f
 
 
 def change_fact(lg, old: dict, q_vec, q_exp: str, t: pd.Timestamp) -> dict | None:
@@ -188,6 +223,16 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
                     s.update({"stale": False, "row": succ_row})
                     chosen.append(s)
                     chosen_aids.add(r["successor_aid"])
+        if not facts and NOTICE_REVERSE_DAYS > 0 and q_vec is not None:
+            # the retriever may only show the new version: compare it with the article it recently replaced
+            for r in valid[:3]:
+                for old in predecessors(lg, _s(r.get("aid")), t, NOTICE_REVERSE_DAYS):
+                    f = _check_fact(change_fact(lg, old, q_vec, q_exp, t), query, q_exp)
+                    if f is not None:
+                        facts.append(f)
+                        break
+                if facts:
+                    break
     else:
         chosen = rows[:n_sources]
         facts = []

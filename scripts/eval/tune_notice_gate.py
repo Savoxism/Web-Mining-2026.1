@@ -91,6 +91,13 @@ def main() -> None:
                 f = L.change_fact(lg, r, q_vec, q_exp, t)
                 if f is not None:
                     it["facts"].append({k: f[k] for k in keys})
+        # reverse candidates: articles in force in the context that replaced an older one (any age; filtered offline)
+        it["rev_facts"] = []
+        for r in valid[:3]:
+            for old in L.predecessors(lg, L._s(r.get("aid")), t, 365 * 50):
+                f = L.change_fact(lg, old, q_vec, q_exp, t)
+                if f is not None:
+                    it["rev_facts"].append({k: f[k] for k in keys} | {"age": int((t - old["_since"]).days)})
 
     def jchanged(it):
         old = "\n\n".join(str(lg.corpus.text.iat[r])[:2500] for r in it["gold"][:2])
@@ -103,7 +110,7 @@ def main() -> None:
 
     # LLM check of every collected fact (Qwen3-4B, the answering model), with and without thinking
     llm = OpenAI(base_url=args.llm_url, api_key="EMPTY")
-    facts = [(it, f) for it in items for f in it["facts"]]
+    facts = [(it, f) for it in items for f in it["facts"] + it["rev_facts"]]
 
     def chk(job):
         (it, f), th = job
@@ -112,20 +119,26 @@ def main() -> None:
 
     with ThreadPoolExecutor(args.workers) as ex:
         list(ex.map(chk, [(x, th) for x in facts for th in (False, True)]))
+    json.dump({"n_items": len(items), "n_rev": sum(len(it["rev_facts"]) for it in items)}, sys.stdout); print()
 
-    def rates(theta, delta=float("inf"), llm_mode=None):
-        def keep(it):
-            return any((f["money_changed"] or f["jaccard"] < theta) and f["new_ce"] >= f["old_ce"] - delta
-                       and (llm_mode is None or f[f"llm_{llm_mode}"]) for f in it["facts"])
+    def rates(theta, delta=float("inf"), llm_mode=None, rev_days=0):
+        def ok(f):
+            return (f["money_changed"] or f["jaccard"] < theta) and f["new_ce"] >= f["old_ce"] - delta \
+                and (llm_mode is None or f[f"llm_{llm_mode}"])
+
+        def keep(it):  # as in build_context: forward facts first, reverse ones only when none passes
+            if any(ok(f) for f in it["facts"]):
+                return True
+            return rev_days > 0 and any(ok(f) and f["age"] <= rev_days for f in it["rev_facts"])
         fa = float(np.mean([keep(it) for it in stable]))
         ch = [it for it in temporal if it["changed"]]
         rec = float(np.mean([keep(it) for it in ch])) if ch else 0.0
         un = [it for it in temporal if not it["changed"]]
-        return {"jaccard_below": theta, "delta": delta, "llm_check": llm_mode, "false_alarm_stable": round(fa, 4), "recall_changed": round(rec, 4),
+        return {"jaccard_below": theta, "delta": delta, "llm_check": llm_mode, "rev_days": rev_days, "false_alarm_stable": round(fa, 4), "recall_changed": round(rec, 4),
                 "notice_on_unchanged_temporal": round(float(np.mean([keep(it) for it in un])) if un else 0.0, 4)}
 
-    grid = [rates(th, d, m) for th in [0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.01] for d in [float("inf"), 4]
-            for m in [None, "fast", "think"]]
+    grid = [rates(th, d, m, rd) for th in [0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.01] for d in [float("inf"), 4]
+            for m in [None, "fast", "think"] for rd in [0, 365, 730, 1825, 3650, 365 * 50]]
     ok = [g for g in grid if g["false_alarm_stable"] <= args.max_fa]
     pick = max(ok, key=lambda g: (g["recall_changed"], -g["false_alarm_stable"])) if ok else \
         min(grid, key=lambda g: g["false_alarm_stable"] - g["recall_changed"])
