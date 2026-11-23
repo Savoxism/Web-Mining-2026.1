@@ -1,1 +1,1 @@
-"""LexGraph: time-aware Vietnamese legal question answering."""
+"""LexGraph-VN: time-aware Vietnamese legal question answering."""

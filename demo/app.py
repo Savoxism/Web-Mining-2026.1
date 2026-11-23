@@ -1,4 +1,4 @@
-"""LexGraph Streamlit demo.
+"""LexGraph-VN Streamlit demo.
 
 Run on the GPU server (models stay in GPU memory), then tunnel the port:
     LEXGRAPH_BI=BAAI/bge-m3 LEXGRAPH_CE=BAAI/bge-reranker-v2-m3 \
@@ -34,7 +34,7 @@ EXAMPLES = {
     "Câu hỏi về luật đã thay đổi": "Người điều khiển xe máy vượt đèn đỏ bị phạt bao nhiêu tiền?",
 }
 
-st.set_page_config(page_title="LexGraph", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="LexGraph-VN", page_icon="⚖️", layout="wide")
 
 
 @st.cache_resource(show_spinner="Đang nạp mô hình và knowledge graph…")
@@ -93,7 +93,7 @@ def graph_html(lg: LexGraph, doc_ids: list[str], t: pd.Timestamp) -> str:
 
 
 # ------------------------------------------------------------------ sidebar
-st.sidebar.title("⚖️ LexGraph")
+st.sidebar.title("⚖️ LexGraph-VN")
 st.sidebar.caption("Trợ lý hỏi đáp pháp luật Việt Nam có theo dõi hiệu lực theo thời gian")
 t_q = pd.Timestamp(st.sidebar.date_input("Thời điểm hỏi", value=date.today(), format="DD/MM/YYYY"))
 time_aware = st.sidebar.toggle("Xét hiệu lực theo thời gian", value=True)
