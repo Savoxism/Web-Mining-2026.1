@@ -169,8 +169,8 @@ def main() -> None:
     for it in items:
         r_ours = lg.search(it["query"], t, w, k_rerank=30, top=20)
         r_plain = lg.search(it["query"], t, w_plain, k_rerank=30, top=15)
-        it["ctx_ours"], it["src_ours"] = build_context(r_ours, lg, t, True)
-        it["ctx_plain"], it["src_plain"] = build_context(r_plain, lg, t, False)
+        it["ctx_ours"], it["src_ours"] = build_context(r_ours, lg, t, True, query=it["query"])
+        it["ctx_plain"], it["src_plain"] = build_context(r_plain, lg, t, False, query=it["query"])
 
     # ---------------- generation (parallel requests)
     def gen(job):

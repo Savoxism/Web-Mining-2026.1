@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from lexgraph.temporal import in_force
+from lexgraph.temporal import chunk_article, in_force
 
 GRAPH_TYPES = {"guides", "based_on", "cites"}
 
@@ -84,6 +84,14 @@ class LexGraph:
         for s, d, ty in zip(se.src.values, se.dst.values, se.type.values):
             self.pair_types[(s, d)].add(ty)
 
+        # full article texts for QA passages (the QA corpus sometimes elides clauses with "...")
+        self.full_text = {}
+        art_path = kg / "articles.parquet"
+        if art_path.exists():
+            aids = sorted(set(c.aid[c.source == "qa"].dropna()))
+            arts = pd.read_parquet(art_path, columns=["aid", "text"], filters=[("aid", "in", aids)])
+            self.full_text = dict(zip(arts.aid, arts.text))
+
         self.bi = SentenceTransformer(bi_model, revision=bi_revision, device=device)
         self.bi.max_seq_length = max_seq_len
         if device == "cuda":
@@ -147,6 +155,19 @@ class LexGraph:
         return np.array(stale, dtype=bool), reasons, succs
 
     # ------------------------------------------------------------------ retrieval
+    def relevant_text(self, q_vec: torch.Tensor, aid: str, fallback: str, n: int = 2, max_words: int = 300) -> str:
+        """Most query-relevant clauses of the full article (falls back to the passage text)."""
+        full = self.full_text.get(aid) if isinstance(aid, str) else None
+        if not full or len(full) <= len(fallback) * 1.05:
+            return fallback
+        chunks = chunk_article(full, max_words)
+        if len(chunks) <= 1:
+            return chunks[0] if chunks else fallback
+        emb = self.bi.encode(chunks, batch_size=32, normalize_embeddings=True, convert_to_tensor=True)
+        sims = (emb @ q_vec).float().cpu().numpy()
+        top = sorted(np.argsort(-sims)[:n])
+        return "\n…\n".join(chunks[i] for i in top)
+
     def encode_queries(self, queries: list[str]) -> torch.Tensor:
         return self.bi.encode(queries, batch_size=256, normalize_embeddings=True, convert_to_tensor=True,
                               show_progress_bar=False)

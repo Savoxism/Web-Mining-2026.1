@@ -24,9 +24,10 @@ def _fmt_date(x) -> str:
 
 
 def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, n_sources: int = 5,
-                  max_chars: int = 1800) -> tuple[str, list[dict]]:
+                  max_chars: int = 1800, query: str | None = None) -> tuple[str, list[dict]]:
     """Pick sources and format them. Time-aware mode prefers valid articles and adds successor articles."""
     rows = results.to_dict("records")
+    q_vec = lg.encode_queries([query])[0] if query else None
     if time_aware:
         valid = [r for r in rows if not r["stale"]][:n_sources]
         chosen = list(valid)
@@ -73,11 +74,19 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
             else:
                 note = f"còn hiệu lực tại {_fmt_date(t)} (hiệu lực từ {_fmt_date(r.get('valid_from'))})"
             head += f"\nTình trạng: {note}"
-        text = str(r.get("text", ""))[:max_chars]
+        text = str(r.get("text", ""))
+        if q_vec is not None and _s(r.get("source")) == "qa":
+            text = lg.relevant_text(q_vec, aid, text)
+        text = text[:max_chars]
         versions = getattr(lg, "versions", None)
-        if time_aware and versions is not None and not r.get("stale") and aid:
+        if time_aware and versions is not None and not r.get("stale") and aid and q_vec is not None:
             am = versions.amendments(aid, t)
-            am = am[am.new_text.notna()].tail(2)
+            am = am[am.new_text.notna()]
+            if len(am):  # only the amendment most related to the question
+                e = lg.bi.encode(am.new_text.str[:1500].tolist(), normalize_embeddings=True, convert_to_tensor=True)
+                sims = (e @ q_vec).float().cpu().numpy()
+                am = am.assign(_sim=sims)
+                am = am[am._sim >= 0.55].nlargest(1, "_sim")
             for a in am.itertuples(index=False):
                 text += (f"\n[Sửa đổi bởi {a.amend_num}, hiệu lực từ {_fmt_date(a.amend_from)}: {a.op} {a.spec}]\n"
                          f"{str(a.new_text)[:700]}")
