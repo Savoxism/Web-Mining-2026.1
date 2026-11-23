@@ -29,6 +29,8 @@ CE = os.environ.get("LEXGRAPH_CE", "BAAI/bge-reranker-v2-m3")
 CE_REV = os.environ.get("LEXGRAPH_CE_REV") or None
 LLM_URL = os.environ.get("LEXGRAPH_LLM_URL", "http://127.0.0.1:8100/v1")
 LLM_MODEL = os.environ.get("LEXGRAPH_LLM_MODEL", "qwen3-4b")
+# data/kg is the snapshot; data/kg_live adds the documents crawled from vbpl.vn (scripts/kg/update_kg.py)
+KG_DIR = Path(os.environ.get("LEXGRAPH_KG_DIR", "data/kg"))
 
 EXAMPLES = {
     "Câu hỏi thông thường": "Người lao động làm việc trong điều kiện bình thường được nghỉ hằng năm bao nhiêu ngày?",
@@ -40,8 +42,9 @@ st.set_page_config(page_title="LexGraph-VN", page_icon="⚖️", layout="wide")
 
 @st.cache_resource(show_spinner="Đang nạp mô hình và knowledge graph…")
 def load():
-    lg = LexGraph(BI, CE, bi_revision=BI_REV, ce_revision=CE_REV)
-    lg.versions = VersionIndex("data/kg/amendments.parquet")
+    lg = LexGraph(BI, CE, bi_revision=BI_REV, ce_revision=CE_REV, kg_dir=str(KG_DIR),
+                  temporal_dir=str(KG_DIR / "temporal"))
+    lg.versions = VersionIndex(str(KG_DIR / "amendments.parquet"))
     return lg
 
 
@@ -65,7 +68,7 @@ def graph_html(lg: LexGraph, doc_ids: list[str], t: pd.Timestamp) -> str:
 
     edges = st.session_state.get("_edges")
     if edges is None:
-        edges = pd.read_parquet("data/kg/edges.parquet")
+        edges = pd.read_parquet(KG_DIR / "edges.parquet")
         edges = edges[edges.type.isin({"amends", "replaces", "repeals", "partially_repeals", "guides"})]
         st.session_state["_edges"] = edges
     focus = set(d for d in doc_ids if d)
@@ -208,7 +211,8 @@ with tab_qa:
                     f"{badge(bool(r.stale)) if ta else ''} · điểm {r.final:.2f}")
             with st.expander(head, expanded=i <= 2):
                 st.caption(f"{str(r.title)[:200] if isinstance(r.title, str) else ''}  \n"
-                           f"Hiệu lực: {fmt_date(r.valid_from)} → {fmt_date(r.valid_to)} · nguồn: {r.source}"
+                           f"Hiệu lực: {fmt_date(r.valid_from)} → {fmt_date(r.valid_to)} · nguồn: "
+                           + ("🆕 văn bản mới (crawl vbpl.vn)" if r.source == "crawl" else str(r.source))
                            + (f"  \nLý do: {r.stale_reason}" if r.stale and ta else ""))
                 st.text(str(r.text)[:3000])
                 st.caption(f"bi-encoder {r.bi_score:.3f} · cross-encoder {r.ce_score:.2f} · PageRank z {r.pagerank_z:.2f} · "
@@ -280,3 +284,7 @@ with tab_kg:
     st.dataframe(pd.DataFrame(stats["top_pagerank"]), use_container_width=True, hide_index=True)
     st.markdown("**Trích xuất dẫn chiếu, so với quan hệ của cổng vbpl.vn**")
     st.json(stats["xref_eval"])
+    upd = KG_DIR / "update_stats.json"
+    if upd.exists():
+        st.markdown("**Cập nhật tăng dần từ vbpl.vn** (văn bản mới crawl theo sitemap)")
+        st.json(json.loads(upd.read_text()))

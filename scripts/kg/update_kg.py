@@ -135,7 +135,9 @@ def main() -> None:
     corpus_live = pd.concat([corpus, new_chunks[corpus.columns.intersection(new_chunks.columns)]], ignore_index=True)
     # refresh validity columns of all rows (older documents may have been closed)
     vt = docs_live.set_index("id").valid_to
-    corpus_live["valid_to"] = corpus_live.doc_id.map(vt).where(corpus_live.doc_id.notna(), corpus_live.valid_to)
+    corpus_live["valid_to"] = corpus_live.doc_id.map(vt).where(corpus_live.doc_id.isin(vt.index), corpus_live.valid_to)
+    stats["corpus_rows_closed"] = int((corpus_live.valid_to.notna() & corpus.valid_to.reindex(corpus_live.index).isna()
+                                       & (corpus_live.index < len(corpus))).sum())
     stats["new_chunks"] = len(new_chunks)
 
     # ---------------- align QA passages of affected documents with the new articles
@@ -171,6 +173,10 @@ def main() -> None:
     docs_live.to_parquet(out / "temporal" / "docs_temporal.parquet", index=False)
     corpus_live.to_parquet(out / "temporal" / "corpus_ext.parquet", index=False)
     succ_live.to_parquet(out / "temporal" / "successors.parquet", index=False)
+    v2 = kg / "temporal" / "successors_v2.parquet"
+    if v2.exists():  # new pairs have no classifier score yet: accepted with the v1 rule
+        ns = new_succ.assign(prob=np.nan, accept=(new_succ.sim >= args.tau) | new_succ.explicit)
+        pd.concat([pd.read_parquet(v2), ns], ignore_index=True).to_parquet(out / "temporal" / "successors_v2.parquet", index=False)
     edges_live.to_parquet(out / "edges.parquet", index=False)
     amend_all.to_parquet(out / "amendments.parquet", index=False)
     pd.concat([pd.read_parquet(kg / "articles.parquet", columns=["aid", "doc_id", "art_no", "heading", "text"]),
