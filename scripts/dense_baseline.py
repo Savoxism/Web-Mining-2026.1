@@ -22,6 +22,7 @@ from metrics import evaluate
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
+    ap.add_argument("--revision", default=None, help="pinned model commit SHA")
     ap.add_argument("--data", default="data/processed")
     ap.add_argument("--split", default="test")
     ap.add_argument("--segment", choices=["none", "pyvi"], default="none",
@@ -45,7 +46,7 @@ def main() -> None:
         qs = [ViTokenizer.tokenize(q) for q in qs]
 
     device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
-    model = SentenceTransformer(args.model, device=device)
+    model = SentenceTransformer(args.model, device=device, revision=args.revision)
     if device == "cuda":
         model.half()
     model.max_seq_length = min(args.max_seq_len, model.max_seq_length or args.max_seq_len)
@@ -67,6 +68,7 @@ def main() -> None:
     res = evaluate(ranked, queries.cids.tolist())
     res.update({
         "method": f"Dense zero-shot ({args.model})",
+        "revision": args.revision,
         "split": args.split,
         "segment": args.segment,
         "max_seq_len": model.max_seq_length,

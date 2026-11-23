@@ -38,9 +38,9 @@ run_phase 1 prepare $PY scripts/prepare_data.py \
 cp data/processed/eda_stats.json "${OUT}/"
 run_phase 2 bm25_syllable $PY scripts/bm25_baseline.py --data data/processed --split test --tokenizer syllable --out "${OUT}"
 run_phase 3 bm25_pyvi $PY scripts/bm25_baseline.py --data data/processed --split test --tokenizer pyvi --out "${OUT}"
-run_phase 4 dense_bge_m3 $PY scripts/dense_baseline.py --model BAAI/bge-m3 --split test --out "${OUT}"
+run_phase 4 dense_bge_m3 $PY scripts/dense_baseline.py --model BAAI/bge-m3 --revision 5617a9f61b028005a4858fdac845db406aefb181 --split test --out "${OUT}"
 run_phase 5 dense_vn_bi_encoder $PY scripts/dense_baseline.py \
-  --model bkai-foundation-models/vietnamese-bi-encoder --segment pyvi --split test --out "${OUT}"
+  --model bkai-foundation-models/vietnamese-bi-encoder --revision 84f9d9ada0d1a3c37557398b9ae9fcedcdf40be0 --segment pyvi --split test --out "${OUT}"
 
 echo "${#PHASES[@]} done done $(date +%s)" > "${RUN_DIR}/phase"
 echo "===== [$(date -u +%FT%TZ)] all phases done in $(( $(date +%s) - START ))s =====" >> "${LOG}"
