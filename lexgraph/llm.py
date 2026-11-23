@@ -77,8 +77,9 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
             head += f"\nTình trạng: {note}"
         text = str(r.get("text", ""))
         if q_vec is not None and _s(r.get("source")) == "qa":
-            text = lg.relevant_text(q_vec, aid, text)
-        text = text[:max_chars]
+            text = lg.relevant_text(q_vec, aid, text, per_chunk_chars=max_chars)[: 2 * max_chars + 10]
+        else:
+            text = text[:max_chars]
         versions = getattr(lg, "versions", None)
         if time_aware and versions is not None and not r.get("stale") and aid and q_vec is not None:
             am = versions.amendments(aid, t)
