@@ -142,6 +142,10 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
         if time_aware and versions is not None and not r.get("stale") and aid and q_vec is not None:
             am = versions.amendments(aid, t)
             am = am[am.new_text.notna()]
+            # only amendments of the clauses shown (or of the whole article)
+            shown = set(re.findall(r"(?m)^(\d+[a-zđ]?)\.\s", text))
+            if shown:
+                am = am[am.target_clause.isna() | am.target_clause.astype(str).isin(shown)]
             if len(am):  # only the amendment most related to the question
                 e = lg.bi.encode(am.new_text.str[:1500].tolist(), normalize_embeddings=True, convert_to_tensor=True)
                 sims = (e @ q_vec).float().cpu().numpy()
