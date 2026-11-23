@@ -99,6 +99,72 @@ def main() -> None:
     else:
         lines.append("\\newcommand{\\ResTtRows}{-- & -- & -- & -- \\\\}")
         lines.append(M("ResNTt", "--"))
+    # ---------------- figure data
+    import ast
+    import csv
+
+    def curve_from(model_dir, log, key):
+        pts = []
+        z = None
+        if Path(log).exists():
+            for line in Path(log).read_text(errors="ignore").splitlines():
+                if line.startswith("zero-shot val:"):
+                    try:
+                        z = ast.literal_eval(line.split(":", 1)[1].strip())
+                    except Exception:
+                        pass
+        states = sorted(Path(model_dir).glob("checkpoint-*/trainer_state.json"),
+                        key=lambda q: int(q.parent.name.split("-")[1]))
+        if z and key.replace("eval_", "") in z:
+            pts.append((0.0, z[key.replace("eval_", "")]))
+        if states:
+            st = json.loads(states[-1].read_text())
+            pts += [(h["epoch"], h[key]) for h in st["log_history"] if key in h]
+        return pts
+
+    bi = curve_from("outputs/models/bge-m3-legal", run / "train_bi/run.log", "eval_val_cosine_mrr@10")
+    cec = curve_from("outputs/models/reranker-legal", run / "train_ce/run.log", "eval_val_mrr@10")
+    lines.append(M("ResBiCurve", " ".join(f"({x:.3f},{y:.4f})" for x, y in bi) or "(0,0)"))
+    lines.append(M("ResCeCurve", " ".join(f"({x:.3f},{y:.4f})" for x, y in cec) or "(0,0)"))
+
+    grid_p = run / ("eval_ft" if ft else "eval_base") / "metrics/val_grid.csv"
+    gm, gs = [], []
+    if grid_p.exists():
+        rows_g = list(csv.DictReader(grid_p.open()))
+        for r in rows_g:
+            if float(r["beta"]) == float(b["beta"]) and float(r["mu"]) == float(b["mu"]):
+                gm.append((float(r["gamma"]), float(r["MRR@10_cur"])))
+                gs.append((float(r["gamma"]), float(r["Stale@10"])))
+        mu_best = {}
+        for r in rows_g:
+            mu_best[float(r["mu"])] = max(mu_best.get(float(r["mu"]), 0), float(r["MRR@10_cur"]))
+        lines.append(M("ResMuCurve", " ".join(f"({k:g},{v:.4f})" for k, v in sorted(mu_best.items()))))
+    lines.append(M("ResGammaMrr", " ".join(f"({x:g},{y:.4f})" for x, y in sorted(gm)) or "(0,0)"))
+    lines.append(M("ResGammaStale", " ".join(f"({x:g},{y:.4f})" for x, y in sorted(gs)) or "(0,0)"))
+
+    fd = load(run / "figdata.json")
+    if fd:
+        mids = [round((a + c) / 2, 3) for a, c in zip(fd["sim_bins"][:-1], fd["sim_bins"][1:])]
+        lines.append(M("ResSimHist", " ".join(f"({m},{n})" for m, n in zip(mids, fd["sim_counts"]))))
+        lines.append(M("ResSimHistExp", " ".join(f"({m},{n})" for m, n in zip(mids, fd["sim_counts_explicit"]))))
+        lines.append(M("ResAlignAccepted", f"{fd['n_accepted']:,}"))
+        lines.append(M("ResAlignPairs", f"{fd['n_pairs']:,}"))
+
+    if tt:
+        for key, short in [("static", "St"), ("extended_no_time", "Nt"), ("lexgraph", "Lg")]:
+            d = tt[key]
+            lines.append(M(f"ResTt{short}", f"(before,{d['before']['Hit@10']:.3f}) (after,{d['after']['Hit@10']:.3f}) "
+                                             f"(both,{d['correct_at_both_dates@10']:.3f})"))
+    else:
+        for short in ["St", "Nt", "Lg"]:
+            lines.append(M(f"ResTt{short}", "(before,0) (after,0) (both,0)"))
+    if ans:
+        for a, short in zip(ans["answers"], ["None", "Plain", "Ours"]):
+            lines.append(M(f"ResAns{short}", f"(correct,{a['correct']:.3f}) (temporal,{a['correct_temporal']:.3f}) "
+                                             f"(notice,{a['change_notice_temporal']:.3f}) (refuse,{a['correct_refusals_oos']:.3f})"))
+    else:
+        for short in ["None", "Plain", "Ours"]:
+            lines.append(M(f"ResAns{short}", "(correct,0) (temporal,0) (notice,0) (refuse,0)"))
     lines.append("\\newcommand{\\ResFindings}{(to be written from the final numbers)}")
     Path(args.out).write_text("\n".join(lines) + "\n")
     print("\n".join(lines))

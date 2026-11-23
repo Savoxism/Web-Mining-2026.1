@@ -51,3 +51,5 @@
   Old → new: ddp_find_unused_parameters False → True, non-reentrant gradient checkpointing. Objective, data, seed and
   batch unchanged. Zero-shot val (2,000 questions) from that run: MRR@10 0.619, Recall@100 0.930. Failed log kept in
   train_bi_failed_ddp/.
+- 2026-11-23 18:54 (giờ VN): chain done, all phases exit 0. eval_timetravel used the eval_base best validation
+  weights (beta 0.25, gamma 2, mu 0), identical to the eval_ft best weights. Results: run-outputs/out_finetune_v1.md.
