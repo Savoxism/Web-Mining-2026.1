@@ -37,6 +37,20 @@ POINT_REF = re.compile(r"điểm\s+([a-zđ]\d?)\b")
 QUOTE_OPEN = ("\"", "“", "'", "‘")
 END_Q = re.compile(r"[\"”']\s*[\.;,]?\s*$")
 HEAD_RE = re.compile(r"^Điều\s+(\d+[a-zđ]?)\s*[\.:]?\s*(.*)$")
+PHRASE = re.compile(r"[\"“]([^\"”]+)[\"”]")
+
+
+def phrase_targets(spec: str) -> list[tuple[str, str | None]]:
+    """'... tại tên khoản 2 Điều 6, khoản 3 Điều 8, khoản 4 Điều 47' -> [("6","2"), ("8","3"), ("47","4")].
+    Clauses listed before an article belong to it ('khoản 1, khoản 2 Điều 6' -> both of Điều 6)."""
+    where = spec.rsplit("tại", 1)[-1] if "tại" in spec else spec
+    out, start = [], 0
+    for m in ART_REF.finditer(where):
+        seg = where[start:m.start()]
+        clauses = CLAUSE_REF.findall(seg)
+        out += [(m.group(1), c) for c in clauses] if clauses else [(m.group(1), None)]
+        start = m.end()
+    return out
 
 
 def parse_doc(args):
@@ -54,6 +68,20 @@ def parse_doc(args):
                 i += 1
                 continue
             m = OP_RE.match(line)
+            if m and m.group(1) in ("Thay cụm từ", "Thay") and "cụm từ" in line and len(PHRASE.findall(m.group(2))) >= 2:
+                # "Thay cụm từ "A" bằng cụm từ "B" tại khoản 4 Điều 6, khoản 5 Điều 47": one operation per target
+                spec = m.group(2)
+                old_p, new_p = PHRASE.findall(spec)[:2]
+                nums = DOCNUM_RE.findall(spec)
+                for art, clause in phrase_targets(spec):
+                    ops.append({
+                        "amend_doc": doc_id, "op": "Thay cụm từ", "spec": f"\"{old_p}\" bằng \"{new_p}\""[:300],
+                        "target_num": nums[0] if nums else cur_head_target, "target_art": art, "target_clause": clause,
+                        "target_points": None, "new_text": f"Thay cụm từ \"{old_p}\" bằng cụm từ \"{new_p}\"",
+                        "phrase_old": old_p, "phrase_new": new_p,
+                    })
+                i += 1
+                continue
             if m and ("Điều" in line or "khoản" in line or "điểm" in line):
                 op, spec = m.group(1), m.group(2)
                 arts = ART_REF.findall(spec)
