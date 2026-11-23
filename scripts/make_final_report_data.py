@@ -134,6 +134,12 @@ def main() -> None:
                   ("articles_same_count", "number of articles")]:
         rows.append(f"{nm} & {100 * pe[k]['accuracy']:.1f} & {pe[k]['n']} \\\\")
     L.append("\\newcommand{\\ParserRows}{" + "\n".join(rows) + "}")
+    pf = [("so_ky_hieu", "number"), ("title", "title"), ("loai_van_ban", "type"), ("ngay_ban_hanh", "issue date"),
+          ("ngay_co_hieu_luc", "effective date"), ("ngay_het_hieu_luc", "expiry date"), ("tinh_trang_hieu_luc", "status"),
+          ("co_quan_ban_hanh", "issuing body"), ("articles_same_count", "no.\\ of articles")]
+    L.append(M("ParserSyms", ",".join(f"p{i}" for i in range(len(pf)))))
+    L.append(M("ParserLabels", ",".join("{" + nm + "}" for _, nm in pf)))
+    L.append(M("ParserCoords", " ".join(f"({100 * pe[k]['accuracy']:.1f},p{i})" for i, (k, _) in enumerate(pf))))
     L.append(M("ParserDocs", f"{pe['documents']}"))
     rk = load(d / "data_crawl_relations_known.json")["evaluation_vs_portal"]
     rows = []
@@ -142,6 +148,11 @@ def main() -> None:
         r = rk[k]
         rows.append(f"{nm} & {r['precision']:.2f} & {r['recall']:.2f} & {r['gold']} \\\\")
     L.append("\\newcommand{\\RelRows}{" + "\n".join(rows) + "}")
+    rel = [("any_type", "any type"), ("based_on", "based on"), ("succession_edges", "succession"), ("expiry_edges", "replaces/repeals")]
+    L.append(M("RelSyms", ",".join(f"r{i}" for i in range(len(rel)))))
+    L.append(M("RelLabels", ",".join("{" + nm + "}" for _, nm in rel)))
+    L.append(M("RelP", " ".join(f"(r{i},{rk[k]['precision']:.2f})" for i, (k, _) in enumerate(rel))))
+    L.append(M("RelR", " ".join(f"(r{i},{rk[k]['recall']:.2f})" for i, (k, _) in enumerate(rel))))
     pn = load(d / "data_crawl_pages_new.json")
     up = load(d / "data_kg_live_update_stats.json")
     L.append(M("CrawlFetched", f"{pn['fetched'] + pn['cached']:,}"))

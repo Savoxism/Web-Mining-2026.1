@@ -53,6 +53,8 @@ def main() -> None:
     best = json.loads(Path(args.weights).read_text())["best_val"]
     w = Weights(beta=best["beta"], gamma=best["gamma"], mu=best["mu"], inject=True)
     lg = LexGraph(args.bi, args.ce)
+    from lexgraph.versions import VersionIndex
+    lg.versions = VersionIndex("data/kg/amendments.parquet")  # as in the demo and eval_answers
     judge = OpenAI(base_url=args.judge_url, api_key="EMPTY")
 
     qs = pd.read_parquet(Path(args.data) / f"queries_{args.split}.parquet").sample(frac=1.0, random_state=7)
