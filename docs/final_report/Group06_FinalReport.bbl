@@ -1,0 +1,147 @@
+\begin{thebibliography}{21}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Blondel et~al.(2008)Blondel, Guillaume, Lambiotte, and
+  Lefebvre]{blondel2008louvain}
+Vincent~D. Blondel, Jean-Loup Guillaume, Renaud Lambiotte, and Etienne
+  Lefebvre.
+\newblock Fast unfolding of communities in large networks.
+\newblock \emph{Journal of Statistical Mechanics: Theory and Experiment},
+  2008\penalty0 (10):\penalty0 P10008, 2008.
+
+\bibitem[Chen et~al.(2024)Chen, Xiao, Zhang, Luo, Lian, and Liu]{chen2024bgem3}
+Jianlv Chen, Shitao Xiao, Peitian Zhang, Kun Luo, Defu Lian, and Zheng Liu.
+\newblock {BGE M3-Embedding}: Multi-lingual, multi-functionality,
+  multi-granularity text embeddings through self-knowledge distillation.
+\newblock \emph{arXiv preprint arXiv:2402.03216}, 2024.
+
+\bibitem[Chen et~al.(2021)Chen, Wang, and Wang]{chen2021timeqa}
+Wenhu Chen, Xinyi Wang, and William~Yang Wang.
+\newblock A dataset for answering time-sensitive questions.
+\newblock In \emph{Advances in Neural Information Processing Systems, Datasets
+  and Benchmarks Track}, 2021.
+
+\bibitem[Friedman(2001)]{friedman2001gbm}
+Jerome~H. Friedman.
+\newblock Greedy function approximation: A gradient boosting machine.
+\newblock \emph{Annals of Statistics}, 29\penalty0 (5):\penalty0 1189--1232,
+  2001.
+
+\bibitem[Henderson et~al.(2017)Henderson, Al-Rfou, Strope, Sung, Luk{\'a}cs,
+  Guo, Kumar, Miklos, and Kurzweil]{henderson2017mnrl}
+Matthew Henderson, Rami Al-Rfou, Brian Strope, Yun-Hsuan Sung, L{\'a}szl{\'o}
+  Luk{\'a}cs, Ruiqi Guo, Sanjiv Kumar, Balint Miklos, and Ray Kurzweil.
+\newblock Efficient natural language response suggestion for smart reply.
+\newblock \emph{arXiv preprint arXiv:1705.00652}, 2017.
+
+\bibitem[Karpukhin et~al.(2020)Karpukhin, O{\u{g}}uz, Min, Lewis, Wu, Edunov,
+  Chen, and Yih]{karpukhin2020dpr}
+Vladimir Karpukhin, Barlas O{\u{g}}uz, Sewon Min, Patrick Lewis, Ledell Wu,
+  Sergey Edunov, Danqi Chen, and Wen-tau Yih.
+\newblock Dense passage retrieval for open-domain question answering.
+\newblock In \emph{Proceedings of EMNLP}, 2020.
+
+\bibitem[Kleinberg(1999)]{kleinberg1999hits}
+Jon~M. Kleinberg.
+\newblock Authoritative sources in a hyperlinked environment.
+\newblock \emph{Journal of the ACM}, 46\penalty0 (5):\penalty0 604--632, 1999.
+
+\bibitem[Koster et~al.(2022)Koster, Illyes, Zeller, and Sassman]{rfc9309}
+Martijn Koster, Gary Illyes, Henner Zeller, and Lizzi Sassman.
+\newblock {RFC} 9309: Robots exclusion protocol.
+\newblock Internet Engineering Task Force, 2022.
+
+\bibitem[Kuhn(1955)]{kuhn1955hungarian}
+Harold~W. Kuhn.
+\newblock The {H}ungarian method for the assignment problem.
+\newblock \emph{Naval Research Logistics Quarterly}, 2\penalty0
+  (1--2):\penalty0 83--97, 1955.
+
+\bibitem[Kwon et~al.(2023)Kwon, Li, Zhuang, Sheng, Zheng, Yu, Gonzalez, Zhang,
+  and Stoica]{kwon2023vllm}
+Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody~Hao Yu,
+  Joseph~E. Gonzalez, Hao Zhang, and Ion Stoica.
+\newblock Efficient memory management for large language model serving with
+  {PagedAttention}.
+\newblock In \emph{Proceedings of the ACM Symposium on Operating Systems
+  Principles (SOSP)}, 2023.
+
+\bibitem[Le et~al.(2025)Le, Nguyen, Nguyen, and Nguyen]{le2025semihard}
+Van-Hoang Le, Duc-Vu Nguyen, Kiet~Van Nguyen, and Ngan Luu-Thuy Nguyen.
+\newblock Optimizing legal document retrieval in {V}ietnamese with semi-hard
+  negative mining.
+\newblock \emph{arXiv preprint arXiv:2507.14619}, 2025.
+
+\bibitem[Lewis et~al.(2020)Lewis, Perez, Piktus, Petroni, Karpukhin, Goyal,
+  K{\"u}ttler, Lewis, Yih, Rockt{\"a}schel, Riedel, and Kiela]{lewis2020rag}
+Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir
+  Karpukhin, Naman Goyal, Heinrich K{\"u}ttler, Mike Lewis, Wen-tau Yih, Tim
+  Rockt{\"a}schel, Sebastian Riedel, and Douwe Kiela.
+\newblock Retrieval-augmented generation for knowledge-intensive {NLP} tasks.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2020.
+
+\bibitem[Li{\v{s}}ka et~al.(2022)Li{\v{s}}ka, Ko{\v{c}}isk{\'y}, Gribovskaya,
+  Terzi, Sezener, Agrawal, de~Masson~d'Autume, Scholtes, Zaheer, Young,
+  Gilsenan-McMahon, Austin, Blunsom, and Lazaridou]{liska2022streamingqa}
+Adam Li{\v{s}}ka, Tom{\'a}{\v{s}} Ko{\v{c}}isk{\'y}, Elena Gribovskaya, Tayfun
+  Terzi, Eren Sezener, Devang Agrawal, Cyprien de~Masson~d'Autume, Tim
+  Scholtes, Manzil Zaheer, Susannah Young, Ellen Gilsenan-McMahon, Sophia
+  Austin, Phil Blunsom, and Angeliki Lazaridou.
+\newblock {StreamingQA}: A benchmark for adaptation to new knowledge over time
+  in question answering models.
+\newblock In \emph{Proceedings of ICML}, 2022.
+
+\bibitem[{OpenAI}(2025)]{gptoss2025}
+{OpenAI}.
+\newblock gpt-oss-120b \& gpt-oss-20b model card.
+\newblock \emph{arXiv preprint arXiv:2508.10925}, 2025.
+
+\bibitem[{Qwen Team}(2025)]{qwen3}
+{Qwen Team}.
+\newblock Qwen3 technical report.
+\newblock \emph{arXiv preprint arXiv:2505.09388}, 2025.
+
+\bibitem[Rabelo et~al.(2022)Rabelo, Goebel, Kim, Kano, Yoshioka, and
+  Satoh]{rabelo2022coliee}
+Juliano Rabelo, Randy Goebel, Mi-Young Kim, Yoshinobu Kano, Masaharu Yoshioka,
+  and Ken Satoh.
+\newblock Overview and discussion of the competition on legal information
+  extraction/entailment ({COLIEE}) 2021.
+\newblock \emph{The Review of Socionetwork Strategies}, 16:\penalty0 111--133,
+  2022.
+
+\bibitem[Reimers \& Gurevych(2019)Reimers and Gurevych]{reimers2019sbert}
+Nils Reimers and Iryna Gurevych.
+\newblock Sentence-{BERT}: Sentence embeddings using siamese {BERT}-networks.
+\newblock In \emph{Proceedings of EMNLP-IJCNLP}, 2019.
+
+\bibitem[Robertson \& Zaragoza(2009)Robertson and Zaragoza]{robertson2009bm25}
+Stephen Robertson and Hugo Zaragoza.
+\newblock The probabilistic relevance framework: {BM25} and beyond.
+\newblock \emph{Foundations and Trends in Information Retrieval}, 3\penalty0
+  (4):\penalty0 333--389, 2009.
+
+\bibitem[Son et~al.(2024)Son, Hieu, An, and Sang]{son2024synthetic}
+Pham~Tien Son, Nguyen~Doan Hieu, Nguyen~Dai An, and Dinh~Viet Sang.
+\newblock Improving {V}ietnamese legal document retrieval using synthetic data.
+\newblock \emph{arXiv preprint arXiv:2412.00657}, 2024.
+
+\bibitem[Zhang \& Choi(2021)Zhang and Choi]{zhang2021situatedqa}
+Michael J.~Q. Zhang and Eunsol Choi.
+\newblock {SituatedQA}: Incorporating extra-linguistic contexts into {QA}.
+\newblock In \emph{Proceedings of EMNLP}, 2021.
+
+\bibitem[Zheng et~al.(2023)Zheng, Chiang, Sheng, Zhuang, Wu, Zhuang, Lin, Li,
+  Li, Xing, Zhang, Gonzalez, and Stoica]{zheng2023judge}
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao
+  Zhuang, Zi~Lin, Zhuohan Li, Dacheng Li, Eric~P. Xing, Hao Zhang, Joseph~E.
+  Gonzalez, and Ion Stoica.
+\newblock Judging {LLM}-as-a-judge with {MT}-bench and chatbot arena.
+\newblock In \emph{Advances in Neural Information Processing Systems, Datasets
+  and Benchmarks Track}, 2023.
+
+\end{thebibliography}
