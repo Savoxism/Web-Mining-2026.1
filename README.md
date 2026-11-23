@@ -27,8 +27,13 @@ Re-ranking score, with $\gamma = 2$ tuned on validation:
 $$s(q,d) = s_{\mathrm{CE}}(q,d) - \gamma \, \mathbb{1}\left[d \text{ not in force at } t_q\right]$$
 
 A "law changed" notice is written only from a **verified change fact**: the clause relevant to the question differs
-between the old article and its successor (different fine amounts or wording), and the new clause is about the question.
-Answers without such a fact have any notice removed after generation.
+between the old article and its successor (different fine amounts, or token Jaccard below 0.85), and Qwen3-4B confirms
+that the answer to the question differs. Any other notice is removed after generation.
+
+Version alignment (which newer article supersedes an old one): a gradient-boosting classifier over pair features
+(similarity, cross-encoder score, heading and token overlap, article distance, relation type, clause-level amendment),
+trained on 2,359 pairs judged by gpt-oss-120b, then one-to-one matching per (old document, successor document) pair.
+Precision 0.88 on judged test pairs; 7,465 article pairs matched, 9,362 of 31,574 QA passages get a successor.
 
 ## Layout
 
@@ -39,9 +44,9 @@ Answers without such a fact have any notice removed after generation.
 | `scripts/crawl/crawl_vbpl.py` | Polite incremental crawler: sitemap `lastmod`, robots.txt (RFC 9309), only `/van-ban/chi-tiet/` pages, rate limit, cache |
 | `scripts/crawl/eval_parser.py` | Field accuracy of the page parser against the public crawl |
 | `scripts/kg/build_kg.py` | Document selection, HTML -> articles, relation canonicalisation, cross-reference extraction, passage linking, Louvain communities |
-| `scripts/kg/build_temporal.py` | Validity intervals, version alignment v1 (explicit references + similarity), extended corpus |
+| `scripts/kg/build_temporal.py` | Validity intervals, successor candidates, extended corpus |
 | `scripts/kg/build_amendments.py` | Clause-level amendment operations (Sửa đổi / Bổ sung / Bãi bỏ / Thay cụm từ) with old and new text |
-| `scripts/kg/align_versions.py` | Version alignment v2: pair features, judge labels, gradient-boosting classifier, one-to-one matching |
+| `scripts/kg/align_versions.py` | Version alignment: pair features, judge labels, gradient-boosting classifier, one-to-one matching -> `successors_v2.parquet` |
 | `scripts/kg/extract_relations.py` | Relations from the text of crawled pages (numbers, name + date citations), evaluated against the portal |
 | `scripts/kg/update_kg.py` | Incremental update: new documents, articles, relations, amendments, validity, alignments -> `data/kg_live/` |
 | `scripts/train/mine_negatives.py` | Semi-hard negative mining |
@@ -72,6 +77,7 @@ uv sync --extra dense --extra demo
 .venv/bin/python scripts/kg/build_kg.py --out data/kg
 .venv/bin/python scripts/kg/build_temporal.py --model BAAI/bge-m3 --out data/kg/temporal
 .venv/bin/python scripts/kg/build_amendments.py
+.venv/bin/python scripts/kg/align_versions.py --ce outputs/models/reranker-legal/final   # needs the judge (gpt-oss-120b) on vLLM
 # see run-inputs/finetune_v1.md for the exact training and evaluation commands
 ```
 
@@ -87,8 +93,7 @@ Incremental update from the portal:
 ```bash
 # on the GPU server (vLLM in its own venv: uv venv .venv-vllm && uv pip install vllm)
 LEXGRAPH_BI=outputs/models/bge-m3-legal/final LEXGRAPH_CE=outputs/models/reranker-legal/final bash scripts/serve_demo.sh
-# optional: LEXGRAPH_KG_DIR=data/kg_live (graph with newly crawled documents),
-#           LEXGRAPH_SUCCESSORS=successors_v2.parquet (version alignment v2)
+# optional: LEXGRAPH_KG_DIR=data/kg_live (graph with newly crawled documents)
 # on your laptop
 ssh -N -L 8501:localhost:8501 H200_ANNP36    # then open http://localhost:8501
 ```
@@ -96,7 +101,7 @@ ssh -N -L 8501:localhost:8501 H200_ANNP36    # then open http://localhost:8501
 The demo answers the same question at different dates (time-travel), shows the validity of every retrieved article,
 the version history of changed articles (clause-level diffs) and the amendment graph.
 
-## Results (run finetune_v1, test split v2, 11,885 questions)
+## Results (test split v2, 11,885 questions)
 
 | | MRR@10 | R@10 |
 |---|---|---|
@@ -105,26 +110,29 @@ the version history of changed articles (clause-level diffs) and the amendment g
 | BGE-M3 fine-tuned | 0.650 | 0.865 |
 | + BGE-Reranker fine-tuned | 0.704 | 0.885 |
 
-Validity signals (fine-tuned models; "cur": a superseded gold passage is replaced by its successor; T: the 2,942 test
-questions whose gold article was superseded):
+Validity signals (fine-tuned models; "cur": a superseded gold passage is replaced by its successor; T: the 1,913 test
+questions whose gold article was superseded; $\gamma = 2$ chosen on validation):
 
 | | MRR@10 | MRR@10 cur | Stale@10 ↓ | T-MRR@10 cur | T-Hit@10 cur |
 |---|---|---|---|---|---|
-| no time signals | 0.704 | 0.630 | 0.261 | 0.334 | 0.664 |
-| **+ time signals (stale penalty, successor injection)** | 0.662 | 0.659 | **0.141** | **0.440** | **0.723** |
+| no time signals | 0.704 | 0.667 | 0.234 | 0.377 | 0.692 |
+| **+ time signals (stale penalty, successor injection)** | 0.671 | 0.681 | **0.125** | **0.486** | **0.744** |
+| + stale penalty only | 0.671 | 0.681 | 0.127 | 0.481 | 0.721 |
+| + time signals, amends edges only | 0.676 | 0.677 | 0.117 | 0.468 | 0.725 |
+| + time signals, replaces / repeals edges only | 0.675 | 0.678 | 0.119 | 0.472 | 0.736 |
 
-* Time-travel (2,707 questions asked before and after a change), Hit@10 at both dates: 0.632 (ours) vs 0.569 (no time
-  signals) vs 0.050 (static RAG).
-* Qwen3-4B answers judged correct (170 questions, judge gpt-oss-120b): 0.713 with time-aware RAG vs 0.647 plain RAG vs
-  0.100 without retrieval.
+* Time-travel (1,752 questions asked before and after a change), Hit@10 at both dates: 0.651 (ours) vs 0.583 (no time
+  signals) vs 0.059 (static RAG).
+* Qwen3-4B answers (170 questions, judge gpt-oss-120b): judged correct 0.680 with time-aware RAG vs 0.633 plain RAG vs
+  0.107 without retrieval; a change notice for 72% of the questions whose answer really changed, 13% false notices on
+  stable questions; 95% correct refusals out of scope. The judge accepts 71% of audited version alignments.
 
-Full tables: `run-outputs/out_finetune_v1.md`.
+## Incremental crawl (vbpl.vn, November 2026)
 
-## In progress (final report)
-
-| Component | Status |
-|---|---|
-| Incremental crawl of vbpl.vn | 978 new documents with full text; 0 robots-blocked requests. Parser vs public crawl (242 documents): number 98.8%, title 99.6%, type 100%, issue / effective date 100%, expiry date 97.8%, status 93.0% |
-| Relations from text | vs the portal's lists on the same 242 documents: any type P 0.76 / R 0.83; based-on P 0.88 / R 0.78 |
-| Version alignment v2 | judged test pairs: precision of accepted links 0.77 (v1 rule) -> 0.83 (classifier, recall 0.33 -> 0.49) |
-| Fewer false "law changed" notices | verified change facts + relevance gate; being tuned on validation |
+* 978 new pages fetched, 0 robots-blocked requests; 645 normative documents after the same selection as the snapshot
+  (no consolidated texts or translations).
+* Parser vs the public crawl (242 documents): number 98.8%, title 99.6%, type 100%, issue / effective date 100%, expiry
+  date 97.8%, status 93.0%.
+* Relations from text vs the portal's lists (same 242 documents): any type P 0.76 / R 0.83; based-on P 0.88 / R 0.78.
+* Live graph (`data/kg_live/`): 11,795 new articles, 6,178 relations, 1,045 clause-level amendments, 367 older documents
+  closed, 21,000 new corpus chunks.

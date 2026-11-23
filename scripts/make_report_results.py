@@ -25,14 +25,21 @@ def main() -> None:
     ap.add_argument("--run", default="outputs/runs/finetune_v1_20261123")
     ap.add_argument("--ce-train", default="data/train/ce_train.json")
     ap.add_argument("--out", default="docs/progress_report/results.tex")
+    # final system (version alignment v2): metrics of the runs under outputs/runs/align_v2_20261123 and notices_v2_20261123
+    ap.add_argument("--ft", default=None, help="eval_pipeline metrics dir of the final system")
+    ap.add_argument("--answers", default=None, help="eval_answers metrics.json of the final system")
+    ap.add_argument("--timetravel", default=None, help="eval_timetravel timetravel.json of the final system")
+    ap.add_argument("--align", default=None, help="figdata_v2.json of version alignment v2")
     args = ap.parse_args()
     run = Path(args.run)
     base = load(run / "eval_base/metrics/results.json")
     # time signals only (no graph signals) when available, else the full evaluation
     ft_dir = "eval_ft_nograph" if (run / "eval_ft_nograph/metrics/results.json").exists() else "eval_ft"
-    ft = load(run / ft_dir / "metrics/results.json")
-    ans = load(run / "eval_answers/metrics/metrics.json")
-    tt = load(run / "eval_timetravel/metrics/timetravel.json")
+    ft_metrics = Path(args.ft) if args.ft else run / ft_dir / "metrics"
+    ft = load(ft_metrics / "results.json")
+    ans = load(args.answers or run / "eval_answers/metrics/metrics.json")
+    tt = load(args.timetravel or run / "eval_timetravel/metrics/timetravel.json")
+    al2 = load(args.align) if args.align else None
     ce = load(args.ce_train)
     notes = []
     if ft is None:
@@ -87,6 +94,17 @@ def main() -> None:
         lines.append(M("ResNAns", f"{ans['n_stable'] + ans['n_temporal'] + ans['n_out_of_scope']}"))
         al = ans.get("alignment_audit", {})
         lines.append(M("ResAlignAcc", f3(al.get("accuracy"))))
+        lines.append(M("ResAlignAccPct", f"{100 * al.get('accuracy', 0):.0f}\\%"))
+        ours = ans["answers"][-1]
+        plain = ans["answers"][1]
+        for k, name in [("change_notice_false_alarm_stable", "FalseAlarm"), ("change_notice_recall_changed", "NoticeRecall"),
+                        ("correct", "Correct"), ("correct_temporal", "CorrectT"), ("change_notice_temporal", "NoticeT")]:
+            if k in ours:
+                lines.append(M(f"ResAns{name}", f3(ours[k])))
+                lines.append(M(f"ResAns{name}Pct", f"{100 * ours[k]:.0f}\\%"))
+        lines.append(M("ResAnsPlainCorrect", f3(plain["correct"])))
+        lines.append(M("ResAnsPlainCorrectT", f3(plain["correct_temporal"])))
+        lines.append(M("ResAnsNoneCorrectPct", f"{100 * ans['answers'][0]['correct']:.0f}\\%"))
     else:
         lines.append("\\newcommand{\\ResLlmRows}{-- & -- & -- & -- & -- \\\\}")
         lines.append(M("ResNAns", "--"))
@@ -99,6 +117,8 @@ def main() -> None:
             tr.append(f"{lab} & {f3(d['before']['Hit@10'])} & {f3(d['after']['Hit@10'])} & {f3(d['correct_at_both_dates@10'])} \\\\")
         lines.append("\\newcommand{\\ResTtRows}{" + "\n".join(tr) + "}")
         lines.append(M("ResNTt", f"{tt['n_questions']:,}"))
+        lines.append(M("ResTtBothPct", f"{100 * tt['lexgraph']['correct_at_both_dates@10']:.0f}\\%"))
+        lines.append(M("ResTtStaticBothPct", f"{100 * tt['static']['correct_at_both_dates@10']:.0f}\\%"))
     else:
         lines.append("\\newcommand{\\ResTtRows}{-- & -- & -- & -- \\\\}")
         lines.append(M("ResNTt", "--"))
@@ -130,7 +150,7 @@ def main() -> None:
     lines.append(M("ResBiCurve", " ".join(f"({x:.3f},{y:.4f})" for x, y in bi) or "(0,0)"))
     lines.append(M("ResCeCurve", " ".join(f"({x:.3f},{y:.4f})" for x, y in cec) or "(0,0)"))
 
-    grid_p = run / (ft_dir if ft else "eval_base") / "metrics/val_grid.csv"
+    grid_p = ft_metrics / "val_grid.csv" if ft else run / "eval_base/metrics/val_grid.csv"
     gm, gs = [], []
     if grid_p.exists():
         rows_g = list(csv.DictReader(grid_p.open()))
@@ -146,7 +166,21 @@ def main() -> None:
     lines.append(M("ResGammaStale", " ".join(f"({x:g},{y:.4f})" for x, y in sorted(gs)) or "(0,0)"))
 
     fd = load(run / "figdata.json")
-    if fd:
+    if al2:  # version alignment v2: classifier probability per (old article, successor article) pair
+        mids = [round((a + c) / 2, 3) for a, c in zip(al2["prob_bins"][:-1], al2["prob_bins"][1:])]
+        rej = [n - m for n, m in zip(al2["pair_prob_counts"], al2["pair_prob_counts_accepted"])]
+        lines.append(M("ResAlignHistRej", " ".join(f"({m},{n})" for m, n in zip(mids, rej))))
+        lines.append(M("ResAlignHistAcc", " ".join(f"({m},{n})" for m, n in zip(mids, al2["pair_prob_counts_accepted"]))))
+        lines.append(M("ResAlignThr", f"{al2['threshold']:.2f}"))
+        lines.append(M("ResAlignAccepted", f"{al2['n_accepted']:,}"))
+        lines.append(M("ResAlignPairs", f"{al2['n_pairs']:,}"))
+        lines.append(M("ResAlignArtPairs", f"{al2['n_article_pairs']:,}"))
+        lines.append(M("ResAlignArtAccepted", f"{al2['n_article_pairs_accepted']:,}"))
+        lines.append(M("ResAlignJudged", f"{al2['judged_pairs']:,}"))
+        t2 = al2["test"]["v2_classifier_hungarian"]
+        lines.append(M("ResAlignPrec", f"{t2['precision']:.2f}"))
+        lines.append(M("ResAlignRec", f"{t2['recall']:.2f}"))
+    elif fd:
         mids = [round((a + c) / 2, 3) for a, c in zip(fd["sim_bins"][:-1], fd["sim_bins"][1:])]
         lines.append(M("ResSimHist", " ".join(f"({m},{n})" for m, n in zip(mids, fd["sim_counts"]))))
         lines.append(M("ResSimHistExp", " ".join(f"({m},{n})" for m, n in zip(mids, fd["sim_counts_explicit"]))))

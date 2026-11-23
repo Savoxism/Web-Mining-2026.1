@@ -110,7 +110,7 @@ use_llm = st.sidebar.toggle("Sinh câu trả lời bằng Qwen3-4B", value=True)
 thinking = st.sidebar.toggle("Qwen3 thinking mode", value=False)
 with st.sidebar.expander("Trọng số re-ranking"):
     gamma = st.slider("γ (phạt văn bản hết hiệu lực)", 0.0, 10.0, 2.0, 0.5)
-    tau = st.slider("τ (ngưỡng khớp phiên bản)", 0.5, 0.95, 0.80, 0.01)
+    tau = 0.80  # version alignment v2 decides successors itself (classifier + one-to-one matching)
     k_rerank = st.slider("Số ứng viên re-rank", 10, 100, 30, 5)
     n_sources = st.slider("Số trích đoạn đưa vào LLM", 2, 10, 5, 1)
 st.sidebar.caption(f"Bi-encoder: `{BI}`  \nCross-encoder: `{CE}`  \nLLM: `{LLM_MODEL}` @ {LLM_URL}")
