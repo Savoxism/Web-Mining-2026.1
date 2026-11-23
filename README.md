@@ -123,9 +123,11 @@ questions whose gold article was superseded; $\gamma = 2$ chosen on validation):
 
 * Time-travel (1,752 questions asked before and after a change), Hit@10 at both dates: 0.651 (ours) vs 0.583 (no time
   signals) vs 0.059 (static RAG).
-* Qwen3-4B answers (170 questions, judge gpt-oss-120b): judged correct 0.680 with time-aware RAG vs 0.633 plain RAG vs
-  0.107 without retrieval; a change notice for 72% of the questions whose answer really changed, 13% false notices on
-  stable questions; 95% correct refusals out of scope. The judge accepts 71% of audited version alignments.
+* Qwen3-4B answers (170 questions, judge gpt-oss-120b): judged correct 0.693 with time-aware RAG vs 0.640 plain RAG vs
+  0.120 without retrieval; a change notice for 73% of the questions whose answer really changed, 13% false notices on
+  stable questions; 95% correct refusals out of scope. The judge accepts 73% of audited version alignments.
+  A second judge (Qwen3-32B) ranks the settings the same way (0.773 vs 0.647 vs 0.173 correct); agreement with
+  gpt-oss-120b: 79% on correctness (Cohen's kappa 0.58), 83% on faithfulness (0.65).
 
 ## Incremental crawl (vbpl.vn, November 2026)
 

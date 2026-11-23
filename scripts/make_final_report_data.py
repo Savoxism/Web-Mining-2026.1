@@ -26,6 +26,7 @@ def main() -> None:
     ap.add_argument("--data", default="outputs/final_report_data")
     ap.add_argument("--baselines", default="outputs/runs/baselines_v2_20261124/metrics")
     ap.add_argument("--failures", default="outputs/runs/notices_v2_20261123/eval_answers_final2/metrics/failure_modes.json")
+    ap.add_argument("--judge2", default="outputs/runs/final_judge_20261124/rejudge.json")
     ap.add_argument("--out", default="docs/final_report/data.tex")
     args = ap.parse_args()
     d = Path(args.data)
@@ -194,6 +195,24 @@ def main() -> None:
         L.append(M("FmMissed", f"{fm['missed_notices']}"))
         L.append(M("FmMissedNoFact", f"{fm['missed_without_fact']}"))
         L.append(M("FmChanged", f"{fm['changed']}"))
+
+    # ---------------- second judge (Qwen3-32B) and agreement with gpt-oss-120b
+    j2 = load(args.judge2)
+    if j2:
+        rows = []
+        for k, name in [("none", "no retrieval"), ("plain", "plain RAG"), ("ours", "\\textbf{time-aware RAG (ours)}")]:
+            r = j2["settings"][k]
+            rows.append(f"{name} & -- & {r['correct']:.3f} & {r['correct_temporal']:.3f} & {r['faithful']:.3f} & "
+                        f"{r['notice_recall_changed']:.3f} & {r['false_notice_stable']:.3f} & -- \\\\")
+        L.append("\\newcommand{\\JTwoRows}{" + "\n".join(rows) + "}")
+        ag = j2["agreement"]
+        for k, nm in [("correct", "Correct"), ("faithful", "Faithful"), ("changed", "Changed")]:
+            L.append(M(f"JTwoKappa{nm}", f"{ag[k]['kappa']:.2f}"))
+            L.append(M(f"JTwoAgree{nm}", f"{100 * ag[k]['raw']:.0f}\\%"))
+        o = j2["settings"]["ours"]
+        L.append(M("JTwoCorrect", f"{o['correct']:.3f}"))
+        L.append(M("JTwoCorrectT", f"{o['correct_temporal']:.2f}"))
+        L.append(M("JTwoPlainCorrect", f"{j2['settings']['plain']['correct']:.3f}"))
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text("\n".join(L) + "\n")
