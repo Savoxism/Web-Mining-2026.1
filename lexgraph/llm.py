@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 
 import pandas as pd
@@ -11,6 +12,10 @@ from lexgraph.query import expand_query
 MONEY = re.compile(r"(\d{1,3}(?:\.\d{3})+)\s*đồng")
 TOK = re.compile(r"\w+", re.UNICODE)
 FACTS_HEADER = "THAY ĐỔI ĐÃ XÁC MINH"
+# a change fact is kept only if the new clause is about as relevant to the question as the old one:
+# CE(q, new) >= CE(q, old) - NOTICE_DELTA (cross-encoder logits); tuned on validation questions
+# (scripts/eval/tune_notice_gate.py). A wrong version alignment gives an unrelated new clause and a low CE(q, new).
+NOTICE_DELTA = float(os.environ.get("LEXGRAPH_NOTICE_DELTA", "inf"))
 NOTICE_RE = re.compile(r"\n*\s*(?:\*\*)?⚠️?\s*(?:\*\*)?\s*Thay đổi pháp luật.*", re.S)
 
 SYSTEM_PROMPT = """Bạn là trợ lý hỏi đáp pháp luật Việt Nam.
@@ -44,14 +49,21 @@ def change_fact(lg, old: dict, q_vec, q_exp: str, t: pd.Timestamp) -> dict | Non
     if not succ_rows:
         return None
     old_clause = lg.relevant_text(q_vec, _s(old.get("aid")), str(old.get("text", "")), n=1, query_text=q_exp)
-    if len(succ_rows) > 1 and lg.ce is not None:
+    old_ce = new_ce = float("nan")
+    if lg.ce is not None:
         import numpy as np
-        sc = np.asarray(lg.ce_scores(q_exp, np.array(succ_rows)), dtype=float)
+        old_row = old.get("row")
+        rows = ([int(old_row)] if old_row is not None else []) + list(succ_rows)
+        raw = np.asarray(lg.ce_scores(q_exp, np.array(rows)), dtype=float)
+        if old_row is not None:
+            old_ce, raw = float(raw[0]), raw[1:]
+        sc = raw.copy()
         if q_exp and "(" in q_exp:  # exact legal phrases from query normalisation win (same rule as clause selection)
             terms = [x.strip().lower() for x in q_exp.rsplit("(", 1)[1].rstrip(")").split(";") if x.strip()]
             bonus = np.array([sum(tm in str(lg.corpus.text.iat[r]).lower() for tm in terms) for r in succ_rows], float)
             sc = sc + (np.abs(sc).max() + 1.0) * bonus
-        new_row = succ_rows[int(sc.argmax())]
+        k = int(sc.argmax())
+        new_row, new_ce = succ_rows[k], float(raw[k])
     else:
         new_row = succ_rows[0]
     new = lg.corpus.iloc[new_row]
@@ -67,7 +79,8 @@ def change_fact(lg, old: dict, q_vec, q_exp: str, t: pd.Timestamp) -> dict | Non
             "old_amount": "–".join(mo[:2]) + " đồng" if mo else "",
             "new_doc": _s(new.so_ky_hieu), "new_art": art(_s(new.aid)),
             "new_amount": "–".join(mn[:2]) + " đồng" if mn else "",
-            "since": _fmt_date(new.valid_from), "new_row": int(new_row)}
+            "since": _fmt_date(new.valid_from), "new_row": int(new_row), "old_ce": old_ce, "new_ce": new_ce,
+            "money_changed": money_changed, "jaccard": round(jac, 3)}
 
 
 def _fact_line(f: dict) -> str:
@@ -95,6 +108,9 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
             # an old version is relevant if its successor is already a source, or it scores close to the best source
             if r["successor_aid"] in chosen_aids or r["ce_score"] >= top_ce - 1.5:
                 f = change_fact(lg, r, q_vec, q_exp, t) if q_vec is not None else None
+                if f is not None and f["new_ce"] == f["new_ce"] and f["old_ce"] == f["old_ce"] \
+                        and f["new_ce"] < f["old_ce"] - NOTICE_DELTA:
+                    f = None  # the new clause is not about the question: probably a wrong alignment
                 if f is not None and (f["old_doc"], f["old_art"], f["new_doc"], f["new_art"]) not in fact_keys:
                     fact_keys.add((f["old_doc"], f["old_art"], f["new_doc"], f["new_art"]))
                     facts.append(f)
