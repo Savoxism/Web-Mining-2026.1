@@ -77,6 +77,11 @@ class LexGraph:
         for s, d in zip(e.src.values, e.dst.values):
             self.adj[s].add(d)
             self.adj[d].add(s)
+        # direct succession edge types between (successor doc, old doc), for edge-type ablations
+        se = edges[edges.type.isin({"amends", "replaces", "repeals", "partially_repeals"}) & edges.dst.isin(present)]
+        self.pair_types = defaultdict(set)
+        for s, d, ty in zip(se.src.values, se.dst.values, se.type.values):
+            self.pair_types[(s, d)].add(ty)
 
         self.bi = SentenceTransformer(bi_model, revision=bi_revision, device=device)
         self.bi.max_seq_length = max_seq_len
@@ -98,26 +103,39 @@ class LexGraph:
             torch.save(self.emb, cache)
 
     # ------------------------------------------------------------------ temporal status
-    def best_successor(self, i: int, t: pd.Timestamp, tau: float):
-        """Best successor article in force at t (explicit reference first, then similarity)."""
-        best = None
+    def best_successor(self, i: int, t: pd.Timestamp, tau: float, use_explicit: bool = True,
+                       allowed_types: set | None = None):
+        """Best successor article in force at t (explicit reference first, then similarity).
+
+        use_explicit=False ignores extracted cross-references (similarity only);
+        allowed_types keeps only successors linked to the old document by a direct edge of those types.
+        """
+        best, best_key = None, None
         for r in self.succ_by_row.get(i, []):
-            if not (r.explicit or r.sim >= tau):
+            explicit = bool(r.explicit) and use_explicit
+            if not (explicit or r.sim >= tau):
                 continue
-            if not in_force([r.succ_from], [r.succ_to], t)[0]:
+            if allowed_types is not None and not (self.pair_types.get((r.succ_doc, r.doc_id), set()) & allowed_types):
                 continue
-            key = (r.explicit, r.sim)
-            if best is None or key > (best.explicit, best.sim):
-                best = r
+            f, to = r.succ_from, r.succ_to
+            if not ((pd.isna(f) or f <= t) and (pd.isna(to) or t < to)):
+                continue
+            key = (explicit, r.sim)
+            if best is None or key > best_key:
+                best, best_key = r, key
         return best
 
-    def status(self, rows: np.ndarray, t: pd.Timestamp, tau: float):
+    def status(self, rows: np.ndarray, t: pd.Timestamp, tau: float, use_explicit: bool = True,
+               allowed_types: set | None = None):
         """Return (stale flags, reasons, successor records) for corpus rows at time t."""
+        rows = np.asarray(rows, dtype=int)
+        if len(rows) == 0:
+            return np.zeros(0, dtype=bool), [], []
         doc_ok = in_force(self.valid_from[rows], self.valid_to[rows], t)
         linked = self.doc_ids[rows] != ""
         stale, reasons, succs = [], [], []
         for k, i in enumerate(rows):
-            s = self.best_successor(int(i), t, tau)
+            s = self.best_successor(int(i), t, tau, use_explicit, allowed_types)
             if linked[k] and not doc_ok[k]:
                 stale.append(True); reasons.append("document not in force")
             elif s is not None:
@@ -141,10 +159,11 @@ class LexGraph:
         return np.concatenate(out_i), np.concatenate(out_s)
 
     def candidates(self, q_vec: torch.Tensor, top_rows: np.ndarray, t: pd.Timestamp, tau: float,
-                   k_rerank: int, inject: bool) -> np.ndarray:
-        rows = list(top_rows[:k_rerank])
+                   k_rerank: int, inject: bool, use_explicit: bool = True,
+                   allowed_types: set | None = None) -> np.ndarray:
+        rows = [int(r) for r in top_rows[:k_rerank]]
         if inject:
-            _, _, succs = self.status(np.array(rows), t, tau)
+            _, _, succs = self.status(np.array(rows), t, tau, use_explicit, allowed_types)
             extra = []
             for s in succs:
                 if s is None:

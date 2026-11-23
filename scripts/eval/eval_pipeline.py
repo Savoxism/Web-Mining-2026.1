@@ -3,8 +3,11 @@
 Gold labels
   * original: the passage the question was written for;
   * current:  the same, except that a gold passage superseded at t_eval is replaced by its successor
-              article (the answer under the law in force at t_eval).
+              article (the answer under the law in force at t_eval), using the main configuration.
 Temporal subset: questions with at least one gold passage superseded at t_eval.
+
+Ablation configurations change how successors are accepted (explicit references, edge types); each
+configuration has its own injected candidates and stale flags, while the current gold stays fixed.
 
 Usage (GPU):
     .venv/bin/python scripts/eval/eval_pipeline.py --bi BAAI/bge-m3 --bi-revision <sha> \
@@ -20,89 +23,98 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import torch
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lexgraph.pipeline import LexGraph, Weights  # noqa: E402
 
+CONFIGS = {
+    "main": {"use_explicit": True, "allowed_types": None},
+    "no_explicit": {"use_explicit": False, "allowed_types": None},
+    "amends_only": {"use_explicit": True, "allowed_types": {"amends"}},
+    "replaces_repeals_only": {"use_explicit": True, "allowed_types": {"replaces", "repeals", "partially_repeals"}},
+}
 
-def mrr_hit(ranked_rows, gold_rows, k=10):
-    for r, x in enumerate(ranked_rows[:k], start=1):
-        if x in gold_rows:
+
+def mrr_hit(order, gold, k=10):
+    for r, x in enumerate(order[:k], start=1):
+        if x in gold:
             return 1.0 / r, 1.0
     return 0.0, 0.0
 
 
-def recall(ranked_rows, gold_rows, k):
-    return len(set(ranked_rows[:k]) & gold_rows) / max(1, len(gold_rows))
+def recall(order, gold, k):
+    return len(set(order[:k]) & gold) / max(1, len(gold))
 
 
-def prepare(lg: LexGraph, queries: pd.DataFrame, t, tau, k_retrieve, k_rerank, use_ce):
-    """Candidates, cross-encoder scores and features for each query (computed once)."""
+def prepare(lg: LexGraph, queries: pd.DataFrame, t, tau, k_retrieve, k_rerank, use_ce, configs):
     q_emb = lg.encode_queries(queries["query"].tolist())
-    ti, ts = lg.retrieve(q_emb, k=k_retrieve)
+    ti, _ = lg.retrieve(q_emb, k=k_retrieve)
     items = []
-    for j, q in enumerate(tqdm(queries.itertuples(index=False), total=len(queries), desc="rerank", mininterval=30)):
+    for j, q in enumerate(tqdm(queries.itertuples(index=False), total=len(queries), desc="prepare", mininterval=30)):
         gold = {lg.row_of[c] for c in q.cids if c in lg.row_of}
-        rows = lg.candidates(q_emb[j], ti[j], t, tau, k_rerank, inject=True)
+        cand = {name: lg.candidates(q_emb[j], ti[j], t, tau, k_rerank, True, **cfg) for name, cfg in configs.items()}
+        union = list(dict.fromkeys(int(r) for rows in cand.values() for r in rows))
+        rows = np.array(union, dtype=int)
+        pos = {r: k for k, r in enumerate(union)}
         bi = (lg.emb[rows] @ q_emb[j]).float().cpu().numpy()
-        ce = lg.ce_scores(q.query, rows) if use_ce else None
-        stale, _, _ = lg.status(rows, t, tau)
-        # current gold: superseded gold passages -> rows of their successor article
-        g_stale, _, g_succ = lg.status(np.array(sorted(gold)), t, tau) if gold else (np.array([]), [], [])
-        cur = set()
-        temporal = False
-        for g, st, s in zip(sorted(gold), g_stale, g_succ):
+        ce = lg.ce_scores(q.query, rows) if use_ce else bi * 10
+        cfg_data = {}
+        for name, cfg in configs.items():
+            idx = np.array([pos[int(r)] for r in cand[name]], dtype=int)
+            stale, _, _ = lg.status(rows[idx], t, tau, **cfg)
+            cfg_data[name] = {"idx": idx, "stale": stale}
+        # current gold (main configuration)
+        g_sorted = sorted(gold)
+        g_stale, _, g_succ = lg.status(np.array(g_sorted, dtype=int), t, tau)
+        cur, temporal = set(), False
+        for g, st, s in zip(g_sorted, g_stale, g_succ):
             if st and s is not None and lg.rows_of_aid.get(s.succ_aid):
                 cur |= set(lg.rows_of_aid[s.succ_aid]); temporal = True
             else:
                 cur.add(g)
-        items.append({"rows": rows, "bi": bi, "ce": ce, "stale": stale,
-                      "prop_ce": lg.propagation(rows, ce) if use_ce else None,
-                      "prop_bi": lg.propagation(rows, bi * 10),
-                      "retrieved": ti[j], "gold": gold, "cur": cur, "temporal": temporal,
-                      "injected": len(rows) > k_rerank})
+        items.append({"rows": rows, "bi": bi, "ce": ce, "cfg": cfg_data, "retrieved": ti[j], "gold": gold,
+                      "cur": cur, "temporal": temporal, "gold_stale": bool(np.any(g_stale)) if len(g_stale) else False})
     return items
 
 
-def score(lg, items, w: Weights, use_ce: bool, k_rerank: int):
-    m = {"MRR@10": [], "R@10": [], "MRR@10_cur": [], "Hit@10_cur": [], "Stale@10": [],
-         "T_MRR@10_cur": [], "T_Hit@10_cur": [], "T_Stale@10": []}
+def score(lg, items, w: Weights, k_rerank: int, cfg: str = "main", use_ce: bool = True):
+    m = {k: [] for k in ["MRR@10", "R@10", "MRR@10_cur", "Hit@10_cur", "Stale@10",
+                         "T_MRR@10_cur", "T_Hit@10_cur", "T_Stale@10"]}
     for it in items:
-        if use_ce:
-            base, prop = it["ce"], it["prop_ce"]
-            rows, stale = it["rows"], it["stale"]
-        else:
-            base, prop = it["bi"] * 10, it["prop_bi"]
-            rows, stale = it["rows"], it["stale"]
-        if not w.inject:
-            keep = slice(0, min(k_rerank, len(rows)))
-            rows, base, prop, stale = rows[keep], base[keep], prop[keep], stale[keep]
+        d = it["cfg"][cfg]
+        idx = d["idx"] if w.inject else d["idx"][:k_rerank]
+        stale = d["stale"] if w.inject else d["stale"][:k_rerank]
+        rows = it["rows"][idx]
+        base = (it["ce"] if use_ce else it["bi"] * 10)[idx]
+        key = ("prop", cfg, w.inject, use_ce)
+        if w.mu and key not in it:
+            it[key] = lg.propagation(rows, base)
+        prop = it[key] if w.mu else np.zeros(len(rows))
         final = lg.combine(rows, base, stale, prop, w)
-        order = rows[np.argsort(-final, kind="stable")]
-        top_stale = stale[np.argsort(-final, kind="stable")][:10]
+        o = np.argsort(-final, kind="stable")
+        order, top_stale = rows[o], stale[o][:10]
         a, _ = mrr_hit(order, it["gold"])
-        m["MRR@10"].append(a)
-        m["R@10"].append(recall(order, it["gold"], 10))
         c, h = mrr_hit(order, it["cur"])
+        m["MRR@10"].append(a); m["R@10"].append(recall(order, it["gold"], 10))
         m["MRR@10_cur"].append(c); m["Hit@10_cur"].append(h)
         m["Stale@10"].append(float(top_stale.mean()) if len(top_stale) else 0.0)
         if it["temporal"]:
             m["T_MRR@10_cur"].append(c); m["T_Hit@10_cur"].append(h)
-            m["T_Stale@10"].append(float(top_stale.mean()))
+            m["T_Stale@10"].append(float(top_stale.mean()) if len(top_stale) else 0.0)
     return {k: round(float(np.mean(v)), 4) if v else None for k, v in m.items()}
 
 
-def retrieval_only(lg, items, k=100):
-    m = {"MRR@10": [], "R@10": [], "R@100": []}
+def retrieval_only(items, k=100):
+    m = {"MRR@10": [], "R@10": [], "R@100": [], "MRR@10_cur": [], "T_MRR@10_cur": []}
     for it in items:
-        order = it["retrieved"]
-        a, _ = mrr_hit(order, it["gold"])
-        m["MRR@10"].append(a)
-        m["R@10"].append(recall(order, it["gold"], 10))
-        m["R@100"].append(recall(order, it["gold"], k))
-    return {k: round(float(np.mean(v)), 4) for k, v in m.items()}
+        order = list(it["retrieved"])
+        a, _ = mrr_hit(order, it["gold"]); c, _ = mrr_hit(order, it["cur"])
+        m["MRR@10"].append(a); m["R@10"].append(recall(order, it["gold"], 10)); m["R@100"].append(recall(order, it["gold"], k))
+        m["MRR@10_cur"].append(c)
+        if it["temporal"]:
+            m["T_MRR@10_cur"].append(c)
+    return {k: round(float(np.mean(v)), 4) if v else None for k, v in m.items()}
 
 
 def main() -> None:
@@ -127,44 +139,50 @@ def main() -> None:
     use_ce = args.ce is not None
 
     lg = LexGraph(args.bi, args.ce, bi_revision=args.bi_revision, ce_revision=args.ce_revision)
+    print(f"[{time.time()-t0:.0f}s] loaded, corpus {len(lg.corpus)}", flush=True)
     data = Path(args.data)
     val = pd.read_parquet(data / "queries_val.parquet").sample(args.val_queries, random_state=42)
     test = pd.read_parquet(data / "queries_test.parquet")
     if args.test_queries:
         test = test.sample(args.test_queries, random_state=42)
 
-    print(f"[{time.time()-t0:.0f}s] preparing val ({len(val)}) and test ({len(test)})", flush=True)
-    v_items = prepare(lg, val, t, args.tau, args.k_retrieve, args.k_rerank, use_ce)
-    t_items = prepare(lg, test, t, args.tau, args.k_retrieve, args.k_rerank, use_ce)
+    v_items = prepare(lg, val, t, args.tau, args.k_retrieve, args.k_rerank, use_ce, {"main": CONFIGS["main"]})
+    print(f"[{time.time()-t0:.0f}s] val prepared", flush=True)
+    t_items = prepare(lg, test, t, args.tau, args.k_retrieve, args.k_rerank, use_ce, CONFIGS)
+    print(f"[{time.time()-t0:.0f}s] test prepared", flush=True)
 
-    # grid search on val, objective = MRR@10 against the current gold
     grid = []
     for beta, gamma, mu in itertools.product([0, 0.1, 0.25, 0.5, 1.0], [0, 0.5, 1, 2, 4, 8], [0, 0.5, 1, 2]):
-        w = Weights(beta=beta, gamma=gamma, mu=mu, tau=args.tau, inject=True)
-        r = score(lg, v_items, w, use_ce, args.k_rerank)
+        r = score(lg, v_items, Weights(beta=beta, gamma=gamma, mu=mu, tau=args.tau, inject=True), args.k_rerank, use_ce=use_ce)
         grid.append({"beta": beta, "gamma": gamma, "mu": mu, **r})
     grid = pd.DataFrame(grid)
     grid.to_csv(out / "val_grid.csv", index=False)
     best = grid.sort_values(["MRR@10_cur", "MRR@10"], ascending=False).iloc[0]
-    bg = grid[grid.gamma == 0].sort_values("MRR@10_cur", ascending=False).iloc[0]       # graph only
-    tg = grid[(grid.beta == 0) & (grid.mu == 0)].sort_values("MRR@10_cur", ascending=False).iloc[0]  # time only
+    bg = grid[grid.gamma == 0].sort_values(["MRR@10_cur", "MRR@10"], ascending=False).iloc[0]
+    tg = grid[(grid.beta == 0) & (grid.mu == 0)].sort_values(["MRR@10_cur", "MRR@10"], ascending=False).iloc[0]
+    B, G, M = float(best.beta), float(best.gamma), float(best.mu)
 
-    variants = {
-        "retriever only": Weights(use_ce=False, inject=False),
-        ("+ cross-encoder" if use_ce else "retriever (rank by bi score)"): Weights(inject=False),
-        "+ graph (PageRank, propagation)": Weights(beta=bg.beta, mu=bg.mu, inject=False),
-        "+ time (stale penalty, successor injection)": Weights(gamma=tg.gamma, inject=True),
-        "full (graph + time)": Weights(beta=best.beta, gamma=best.gamma, mu=best.mu, inject=True),
-    }
-    results = {"retrieval_only_test": retrieval_only(lg, t_items), "variants": {}}
-    for name, w in variants.items():
-        ce_flag = use_ce and w.use_ce
+    V = []
+    V.append(("retriever + re-ranker", Weights(inject=False), "main"))
+    V.append(("+ graph (beta, mu)", Weights(beta=float(bg.beta), mu=float(bg.mu), inject=False), "main"))
+    V.append(("+ time (gamma, injection)", Weights(gamma=float(tg.gamma), inject=True), "main"))
+    V.append(("full (graph + time)", Weights(beta=B, gamma=G, mu=M, inject=True), "main"))
+    V.append(("full - PageRank", Weights(beta=0, gamma=G, mu=M, inject=True), "main"))
+    V.append(("full - propagation", Weights(beta=B, gamma=G, mu=0, inject=True), "main"))
+    V.append(("full - successor injection", Weights(beta=B, gamma=G, mu=M, inject=False), "main"))
+    V.append(("full - explicit references", Weights(beta=B, gamma=G, mu=M, inject=True), "no_explicit"))
+    V.append(("full, amends edges only", Weights(beta=B, gamma=G, mu=M, inject=True), "amends_only"))
+    V.append(("full, replaces/repeals only", Weights(beta=B, gamma=G, mu=M, inject=True), "replaces_repeals_only"))
+
+    results = {"retrieval_only_test": retrieval_only(t_items), "variants": {}}
+    for name, w, cfg in V:
         results["variants"][name] = {"weights": {"beta": w.beta, "gamma": w.gamma, "mu": w.mu, "inject": w.inject},
-                                     **score(lg, t_items, w, ce_flag, args.k_rerank)}
+                                     "config": cfg, **score(lg, t_items, w, args.k_rerank, cfg, use_ce)}
     results["n_test"] = len(t_items)
     results["n_test_temporal"] = int(sum(it["temporal"] for it in t_items))
+    results["n_test_gold_stale"] = int(sum(it["gold_stale"] for it in t_items))
     results["n_val"] = len(v_items)
-    results["best_val"] = best.to_dict()
+    results["best_val"] = {k: (float(v) if v is not None else None) for k, v in best.to_dict().items()}
     results["config"] = vars(args)
     results["seconds"] = round(time.time() - t0, 1)
     (out / "results.json").write_text(json.dumps(results, ensure_ascii=False, indent=2, default=float))
