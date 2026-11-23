@@ -9,6 +9,7 @@ document or are linked to it by a guides / based_on / cites edge.
 from __future__ import annotations
 
 import hashlib
+import os
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,7 +62,10 @@ class LexGraph:
                 self.rows_of_aid[a].append(i)
 
         # successor candidates of QA passages
-        succ = pd.read_parquet(td / "successors.parquet")
+        # successors.parquet: v1 (cosine >= tau); successors_v2.parquet: classifier + one-to-one matching (`accept`)
+        succ_file = os.environ.get("LEXGRAPH_SUCCESSORS", "successors.parquet")
+        succ = pd.read_parquet(td / succ_file)
+        self.succ_version = "v2" if "accept" in succ.columns else "v1"
         docs = pd.read_parquet(td / "docs_temporal.parquet").set_index("id")
         self.docs = docs
         succ["succ_from"] = succ.succ_doc.map(docs.valid_from)
@@ -124,7 +128,10 @@ class LexGraph:
         best, best_key = None, None
         for r in self.succ_by_row.get(i, []):
             explicit = bool(r.explicit) and use_explicit
-            if not (explicit or r.sim >= tau):
+            if self.succ_version == "v2":
+                if not r.accept:
+                    continue
+            elif not (explicit or r.sim >= tau):
                 continue
             if allowed_types is not None and not (self.pair_types.get((r.succ_doc, r.doc_id), set()) & allowed_types):
                 continue
