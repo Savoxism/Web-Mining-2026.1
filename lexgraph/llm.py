@@ -135,7 +135,7 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
             head += f"\nTình trạng: {note}"
         text = str(r.get("text", ""))
         if q_vec is not None and _s(r.get("source")) == "qa":
-            text = lg.relevant_text(q_vec, aid, text, per_chunk_chars=max_chars, query_text=q_exp)[: 2 * max_chars + 10]
+            text = lg.relevant_text(q_vec, aid, text, n=1, per_chunk_chars=2 * max_chars, query_text=q_exp)
         else:
             text = text[:max_chars]
         versions = getattr(lg, "versions", None)
@@ -176,7 +176,7 @@ def answer(client, model: str, question: str, context: str, t: pd.Timestamp, thi
     resp = client.chat.completions.create(
         model=model,
         messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}],
-        temperature=0.3 if not thinking else 0.6,
+        temperature=0.1 if not thinking else 0.6,
         top_p=0.8 if not thinking else 0.95,
         max_tokens=max_tokens if not thinking else 4096,
         extra_body={"chat_template_kwargs": {"enable_thinking": thinking}, "top_k": 20},
