@@ -51,8 +51,8 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
         chosen = rows[:n_sources]
 
     seen, uniq = set(), []
-    for r in chosen:  # one block per article (QA passages and chunks may repeat an article)
-        key = _s(r.get("aid")) or f"row{r.get('row')}"
+    for r in chosen:  # one block per article or chunk (the QA corpus repeats some articles)
+        key = _s(r.get("chunk_id")) or _s(r.get("aid")) or f"row{r.get('row')}"
         if key not in seen:
             seen.add(key)
             uniq.append(r)
