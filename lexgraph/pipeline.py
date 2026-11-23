@@ -172,6 +172,10 @@ class LexGraph:
         else:
             emb = self.bi.encode(chunks, batch_size=32, normalize_embeddings=True, convert_to_tensor=True)
             sims = (emb @ q_vec).float().cpu().numpy()
+        if query_text and "(" in query_text:  # exact legal phrases from query normalisation get a bonus
+            terms = [x.strip().lower() for x in query_text.rsplit("(", 1)[1].rstrip(")").split(";") if x.strip()]
+            bonus = np.array([sum(tm in c.lower() for tm in terms) for c in chunks], dtype=float)
+            sims = sims + (np.abs(sims).max() + 1.0) * bonus
         top = np.argsort(-sims)[:n]  # most relevant clauses first, each kept short
         return "\n…\n".join(chunks[i][:per_chunk_chars] for i in top)
 
