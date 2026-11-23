@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_amendments import clause_text, parse_doc  # noqa: E402
 from build_kg import html_to_lines, split_articles  # noqa: E402
-from extract_relations import extract  # noqa: E402
+from extract_relations import Resolver, extract  # noqa: E402
 from lexgraph.temporal import chunk_article  # noqa: E402
 
 DOC_COLS = ["id", "so_ky_hieu", "title", "loai_van_ban", "tinh_trang_hieu_luc", "valid_from", "valid_to",
@@ -77,12 +77,13 @@ def main() -> None:
 
     num2doc = (docs_live.sort_values("ngay_ban_hanh", ascending=False).dropna(subset=["so_ky_hieu"])
                .drop_duplicates("so_ky_hieu").set_index("so_ky_hieu").id.to_dict())
+    res = Resolver(docs_live[["id", "so_ky_hieu", "ngay_ban_hanh", "loai_van_ban", "title"]])
     rel = []
     for r in pages.itertuples(index=False):
-        for num, ty in extract(r.title, r.content_html, r.so_ky_hieu):
-            if num in num2doc:
-                rel.append({"src": r.id, "dst": num2doc[num], "type": ty, "label": "extracted"})
-    rel = pd.DataFrame(rel)
+        issued = pd.to_datetime(r.ngay_ban_hanh, errors="coerce")
+        for dst, ty in extract(r.title, r.content_html, r.id, res, None if pd.isna(issued) else issued.date()):
+            rel.append({"src": r.id, "dst": dst, "type": ty, "label": "extracted"})
+    rel = pd.DataFrame(rel, columns=["src", "dst", "type", "label"])
     edges = pd.read_parquet(kg / "edges.parquet")
     edges_live = pd.concat([edges, rel], ignore_index=True).drop_duplicates(["src", "dst", "type"])
     stats["new_edges"] = len(rel)
