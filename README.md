@@ -60,3 +60,15 @@ LEXGRAPH_BI=outputs/models/bge-m3-legal/final LEXGRAPH_CE=outputs/models/reranke
 # on your laptop
 ssh -N -L 8501:localhost:8501 H200_ANNP36    # then open http://localhost:8501
 ```
+
+## Results (run finetune_v1, test split v2, 11,885 questions)
+
+| | MRR@10 | Stale@10 ↓ | T-MRR@10 (current law) |
+|---|---|---|---|
+| bge-m3 zero-shot (retrieval only) | 0.539 | – | – |
+| fine-tuned bge-m3 + fine-tuned reranker | 0.704 | 0.261 | 0.334 |
+| + time signals (LexGraph-VN) | 0.664 | 0.145 | 0.435 |
+
+Time-travel (2,707 questions asked before and after a change): correct at both dates (Hit@10) 0.632 vs 0.050 for static RAG.
+Qwen3-4B answers judged correct: 0.713 with time-aware RAG vs 0.647 plain RAG vs 0.10 without retrieval.
+Full tables: `run-outputs/out_finetune_v1.md`.
