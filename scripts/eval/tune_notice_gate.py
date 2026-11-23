@@ -46,6 +46,7 @@ def main() -> None:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     L.NOTICE_DELTA = float("inf")  # collect every fact, gate offline
+    L.NOTICE_JACCARD = 1.01      # any wording difference counts; the Jaccard threshold is tuned offline
     t = pd.Timestamp(args.t_eval)
     best = json.loads(Path(args.weights).read_text())["best_val"]
     w = Weights(beta=best["beta"], gamma=best["gamma"], mu=best["mu"], inject=True)
@@ -97,18 +98,20 @@ def main() -> None:
     with ThreadPoolExecutor(args.workers) as ex:
         list(ex.map(jchanged, temporal))
 
-    def rates(delta):
-        keep = lambda it: any(f["new_ce"] >= f["old_ce"] - delta for f in it["facts"])  # noqa: E731
+    def rates(theta, delta=float("inf")):
+        def keep(it):
+            return any((f["money_changed"] or f["jaccard"] < theta) and f["new_ce"] >= f["old_ce"] - delta for f in it["facts"])
         fa = float(np.mean([keep(it) for it in stable]))
         ch = [it for it in temporal if it["changed"]]
         rec = float(np.mean([keep(it) for it in ch])) if ch else 0.0
         un = [it for it in temporal if not it["changed"]]
-        return {"delta": delta, "false_alarm_stable": round(fa, 4), "recall_changed": round(rec, 4),
+        return {"jaccard_below": theta, "delta": delta, "false_alarm_stable": round(fa, 4), "recall_changed": round(rec, 4),
                 "notice_on_unchanged_temporal": round(float(np.mean([keep(it) for it in un])) if un else 0.0, 4)}
 
-    grid = [rates(d) for d in [float("inf"), 6, 4, 3, 2, 1.5, 1, 0.5, 0, -0.5, -1]]
+    grid = [rates(th, d) for th in [0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.01] for d in [float("inf"), 4, 2]]
     ok = [g for g in grid if g["false_alarm_stable"] <= args.max_fa]
-    pick = max(ok, key=lambda g: (g["recall_changed"], g["delta"])) if ok else min(grid, key=lambda g: g["false_alarm_stable"] - g["recall_changed"])
+    pick = max(ok, key=lambda g: (g["recall_changed"], -g["false_alarm_stable"])) if ok else \
+        min(grid, key=lambda g: g["false_alarm_stable"] - g["recall_changed"])
     res = {"split": args.split, "n_stable": len(stable), "n_temporal": len(temporal),
            "n_temporal_changed": int(sum(it["changed"] for it in temporal)), "grid": grid, "chosen": pick}
     (out / "notice_gate.json").write_text(json.dumps(res, indent=2, default=str))

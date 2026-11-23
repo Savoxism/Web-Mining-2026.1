@@ -16,6 +16,8 @@ FACTS_HEADER = "THAY ĐỔI ĐÃ XÁC MINH"
 # CE(q, new) >= CE(q, old) - NOTICE_DELTA (cross-encoder logits); tuned on validation questions
 # (scripts/eval/tune_notice_gate.py). A wrong version alignment gives an unrelated new clause and a low CE(q, new).
 NOTICE_DELTA = float(os.environ.get("LEXGRAPH_NOTICE_DELTA", "inf"))
+# the clause counts as changed when the fine amounts differ or the token Jaccard of old vs new clause is below this
+NOTICE_JACCARD = float(os.environ.get("LEXGRAPH_NOTICE_JACCARD", "0.6"))
 NOTICE_RE = re.compile(r"\n*\s*(?:\*\*)?⚠️?\s*(?:\*\*)?\s*Thay đổi pháp luật.*", re.S)
 
 SYSTEM_PROMPT = """Bạn là trợ lý hỏi đáp pháp luật Việt Nam.
@@ -72,7 +74,7 @@ def change_fact(lg, old: dict, q_vec, q_exp: str, t: pd.Timestamp) -> dict | Non
     a, b = _body_tokens(old_clause), _body_tokens(new_clause)
     jac = len(a & b) / max(1, len(a | b))
     money_changed = bool(mo and mn and set(mo[:4]) != set(mn[:4]))
-    if not (money_changed or jac < 0.6):
+    if not (money_changed or jac < NOTICE_JACCARD):
         return None
     art = lambda aid: aid.split("#")[-1].split("~")[0] if "#" in aid else "?"  # noqa: E731
     return {"old_doc": _s(old.get("so_ky_hieu")), "old_art": art(_s(old.get("aid"))),
