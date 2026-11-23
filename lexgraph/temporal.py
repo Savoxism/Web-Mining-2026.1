@@ -41,21 +41,30 @@ CLAUSE_RE = re.compile(r"^(\d+[a-zđ]?\.|[a-zđ]\)|-)\s")
 
 
 def chunk_article(text: str, max_words: int = 300) -> list[str]:
-    """Split a long article into chunks of whole clauses; each chunk repeats the article heading."""
+    """Split a long article into chunks of whole clauses/points; each chunk repeats the article heading and,
+    when it starts inside a clause, that clause's opening line (which carries e.g. the fine amount)."""
     lines = [l for l in text.split("\n") if l.strip()]
     if not lines:
         return []
     head, body = lines[0], lines[1:]
     if len(text.split()) <= max_words or not body:
         return [text]
-    chunks, cur, n = [], [], 0
+    chunks, cur, n, clause_head, cur_clause_head = [], [], 0, None, None
     for line in body:
         w = len(line.split())
+        is_clause = bool(re.match(r"^\d+[a-zđ]?\.\s", line))
         if cur and n + w > max_words and (CLAUSE_RE.match(line) or n > 2 * max_words):
-            chunks.append(cur)
+            chunks.append((cur_clause_head, cur))
             cur, n = [], 0
+            cur_clause_head = None if is_clause else clause_head
+        if is_clause:
+            clause_head = line
         cur.append(line)
         n += w
     if cur:
-        chunks.append(cur)
-    return [head + "\n" + "\n".join(c) for c in chunks]
+        chunks.append((cur_clause_head, cur))
+    out = []
+    for ch_head, c in chunks:
+        prefix = [head] + ([ch_head + " (tiếp)"] if ch_head else [])
+        out.append("\n".join(prefix + c))
+    return out
