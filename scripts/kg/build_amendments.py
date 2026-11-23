@@ -89,8 +89,9 @@ def parse_doc(args):
 
 def clause_text(article: str, clause: str | None, points: str | None) -> str | None:
     """Return the old text of a clause (and point) from an article's full text."""
-    if not article or not clause:
+    if not isinstance(article, str) or not isinstance(clause, str):
         return None
+    points = points if isinstance(points, str) else None
     lines = article.split("\n")
     out, inside = [], False
     for l in lines:
