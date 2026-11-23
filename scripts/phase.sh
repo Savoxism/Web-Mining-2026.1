@@ -8,6 +8,7 @@ DIR="outputs/runs/${RUN_ID}/${PHASE}"
 mkdir -p "$DIR"
 rm -f "$DIR/exit_code"
 export HF_HUB_OFFLINE=1 HF_HUB_DISABLE_XET=1 TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1 OMP_NUM_THREADS=8
+export NCCL_NVLS_ENABLE=0  # NVLS multicast fails under the CUDA MPS daemon on this server
 export CUDA_VISIBLE_DEVICES="$GPUS"
 date +%s > "$DIR/start_time"
 echo "$*" > "$DIR/command"
