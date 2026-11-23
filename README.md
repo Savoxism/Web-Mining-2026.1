@@ -65,7 +65,7 @@ Precision 0.88 on judged test pairs; 7,465 article pairs matched, 9,362 of 31,57
 * Legal QA pairs: `Savoxism/soict-hackathon-2025-legal-corpus` (Hugging Face) -> `data/soict-hackathon-2025-legal-corpus/`.
   132,424 question–article pairs, 68,663 passages; split v2 95,231 / 11,891 / 11,885.
 * Legal documents: `th1nhng0/vietnamese-legal-documents` (CC BY 4.0 crawl of vbpl.vn, 171,556 documents) -> `data/vbpl/`.
-  Knowledge graph: 148,282 documents, 981,412 articles, 894,330 typed edges (9 types), 37,727 clause-level amendments.
+  Knowledge graph: 148,282 documents, 981,412 articles, 894,330 typed edges (9 types), 38,344 clause-level amendments.
 * New documents since that crawl: our own crawler on the vbpl.vn sitemap -> `data/crawl/`. The portal's relation lists
   come from its API, which robots.txt disallows, so relations of new documents are extracted from their text.
 
@@ -134,5 +134,5 @@ questions whose gold article was superseded; $\gamma = 2$ chosen on validation):
 * Parser vs the public crawl (242 documents): number 98.8%, title 99.6%, type 100%, issue / effective date 100%, expiry
   date 97.8%, status 93.0%.
 * Relations from text vs the portal's lists (same 242 documents): any type P 0.76 / R 0.83; based-on P 0.88 / R 0.78.
-* Live graph (`data/kg_live/`): 11,795 new articles, 6,178 relations, 1,045 clause-level amendments, 367 older documents
+* Live graph (`data/kg_live/`): 11,795 new articles, 6,178 relations, 1,057 clause-level amendments, 367 older documents
   closed, 21,000 new corpus chunks.
