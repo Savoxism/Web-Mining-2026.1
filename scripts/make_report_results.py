@@ -28,7 +28,9 @@ def main() -> None:
     args = ap.parse_args()
     run = Path(args.run)
     base = load(run / "eval_base/metrics/results.json")
-    ft = load(run / "eval_ft/metrics/results.json")
+    # time signals only (no graph signals) when available, else the full evaluation
+    ft_dir = "eval_ft_nograph" if (run / "eval_ft_nograph/metrics/results.json").exists() else "eval_ft"
+    ft = load(run / ft_dir / "metrics/results.json")
     ans = load(run / "eval_answers/metrics/metrics.json")
     tt = load(run / "eval_timetravel/metrics/timetravel.json")
     ce = load(args.ce_train)
@@ -47,30 +49,31 @@ def main() -> None:
               M("ResZsCeMrr", f3(bv["retriever + re-ranker"]["MRR@10"])), M("ResZsCeRten", f3(bv["retriever + re-ranker"]["R@10"])),
               M("ResFtMrr", f3(f_ret["MRR@10"])), M("ResFtRten", f3(f_ret["R@10"])),
               M("ResFtCeMrr", f3(fv["retriever + re-ranker"]["MRR@10"])), M("ResFtCeRten", f3(fv["retriever + re-ranker"]["R@10"]))]
-    no, yes = fv["retriever + re-ranker"], fv["full (graph + time)"]
+    no, yes = fv["retriever + re-ranker"], fv["+ time (gamma, injection)"]
     lines += [M("ResStaleNoTime", f3(no["Stale@10"])), M("ResStaleTime", f3(yes["Stale@10"])),
               M("ResTmrrNoTime", f3(no["T_MRR@10_cur"])), M("ResTmrrTime", f3(yes["T_MRR@10_cur"])),
               M("ResThitNoTime", f3(no["T_Hit@10_cur"])), M("ResThitTime", f3(yes["T_Hit@10_cur"])),
               M("ResNTemporal", f"{(ft or base)['n_test_temporal']:,}")]
+    lines += [M("ResStaleNoTimePct", f"{100 * no['Stale@10']:.0f}\\%"), M("ResStaleTimePct", f"{100 * yes['Stale@10']:.1f}\\%"),
+              M("ResTimeMrr", f3(yes["MRR@10"])),
+              M("ResTmrrAmends", f3(fv.get("full, amends edges only", {}).get("T_MRR@10_cur"))),
+              M("ResTmrrRepl", f3(fv.get("full, replaces/repeals only", {}).get("T_MRR@10_cur")))]
     b = (ft or base)["best_val"]
-    lines.append(M("ResWeights", f"$\\beta={b['beta']:g}$, $\\gamma={b['gamma']:g}$, $\\mu={b['mu']:g}$"))
+    lines.append(M("ResWeights", f"$\\gamma={b['gamma']:g}$"))
     lines.append(M("ResCePairs", f"{ce['rows'] * 8:,}" if ce else "--"))
 
-    labels = [("retriever + re-ranker", "retriever + re-ranker (no graph, no time)"),
-              ("+ graph (beta, mu)", "\\quad + graph (PageRank, propagation)"),
-              ("+ time (gamma, injection)", "\\quad + time (stale penalty, successor injection)"),
-              ("full (graph + time)", "\\quad \\textbf{full (graph + time)}"),
-              ("full - successor injection", "\\quad full $-$ successor injection"),
-              ("full - explicit references", "\\quad full $-$ explicit references (similarity only)"),
-              ("full, amends edges only", "\\quad full, amends edges only"),
-              ("full, replaces/repeals only", "\\quad full, replaces / repeals edges only")]
+    labels = [("retriever + re-ranker", "fine-tuned retriever + re-ranker (no time signals)"),
+              ("+ time (gamma, injection)", "\\quad \\textbf{+ time signals (stale penalty, successor injection)}"),
+              ("full - successor injection", "\\quad + stale penalty only (no successor injection)"),
+              ("full, amends edges only", "\\quad + time signals, amends edges only"),
+              ("full, replaces/repeals only", "\\quad + time signals, replaces / repeals edges only")]
     rows = []
     for key, lab in labels:
         v = fv.get(key)
         if v:
             rows.append(f"{lab} & {f3(v['MRR@10'])} & {f3(v['MRR@10_cur'])} & {f3(v['Stale@10'])} & "
                         f"{f3(v['T_MRR@10_cur'])} & {f3(v['T_Hit@10_cur'])} \\\\")
-        if key == "full (graph + time)":
+        if key == "+ time (gamma, injection)":
             rows.append("\\midrule")
     lines.append("\\newcommand{\\ResAblRows}{" + "\n".join(rows) + "}")
 
@@ -127,7 +130,7 @@ def main() -> None:
     lines.append(M("ResBiCurve", " ".join(f"({x:.3f},{y:.4f})" for x, y in bi) or "(0,0)"))
     lines.append(M("ResCeCurve", " ".join(f"({x:.3f},{y:.4f})" for x, y in cec) or "(0,0)"))
 
-    grid_p = run / ("eval_ft" if ft else "eval_base") / "metrics/val_grid.csv"
+    grid_p = run / (ft_dir if ft else "eval_base") / "metrics/val_grid.csv"
     gm, gs = [], []
     if grid_p.exists():
         rows_g = list(csv.DictReader(grid_p.open()))

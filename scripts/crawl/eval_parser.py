@@ -22,8 +22,12 @@ def norm(x):
 
 
 def day(x):
-    d = pd.to_datetime(x, errors="coerce", utc=True)
-    return None if pd.isna(d) else (d.tz_convert("Asia/Ho_Chi_Minh").date() if d.tzinfo else d.date())
+    """Page dates are ISO (local time), public-crawl dates are dd/mm/yyyy."""
+    if x is None or (isinstance(x, float) and pd.isna(x)) or str(x).strip() == "":
+        return None
+    s = str(x)
+    d = pd.to_datetime(s, errors="coerce", dayfirst=bool(re.match(r"\d{1,2}/\d{1,2}/\d{4}", s)))
+    return None if pd.isna(d) else d.date()
 
 
 def main() -> None:
