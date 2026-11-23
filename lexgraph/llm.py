@@ -46,7 +46,11 @@ def change_fact(lg, old: dict, q_vec, q_exp: str, t: pd.Timestamp) -> dict | Non
     old_clause = lg.relevant_text(q_vec, _s(old.get("aid")), str(old.get("text", "")), n=1, query_text=q_exp)
     if len(succ_rows) > 1 and lg.ce is not None:
         import numpy as np
-        sc = lg.ce_scores(q_exp, np.array(succ_rows))
+        sc = np.asarray(lg.ce_scores(q_exp, np.array(succ_rows)), dtype=float)
+        if q_exp and "(" in q_exp:  # exact legal phrases from query normalisation win (same rule as clause selection)
+            terms = [x.strip().lower() for x in q_exp.rsplit("(", 1)[1].rstrip(")").split(";") if x.strip()]
+            bonus = np.array([sum(tm in str(lg.corpus.text.iat[r]).lower() for tm in terms) for r in succ_rows], float)
+            sc = sc + (np.abs(sc).max() + 1.0) * bonus
         new_row = succ_rows[int(sc.argmax())]
     else:
         new_row = succ_rows[0]
@@ -86,7 +90,7 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
         top_ce = max([r["ce_score"] for r in valid], default=0.0)
         n_old, facts, fact_keys = 0, [], set()
         for r in rows:
-            if n_old >= 3 or not (r["stale"] and _s(r.get("successor_aid"))):
+            if n_old >= 1 or not (r["stale"] and _s(r.get("successor_aid"))):
                 continue
             # an old version is relevant if its successor is already a source, or it scores close to the best source
             if r["successor_aid"] in chosen_aids or r["ce_score"] >= top_ce - 1.5:
