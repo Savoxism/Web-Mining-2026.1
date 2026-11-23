@@ -81,8 +81,11 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
-    rp = urllib.robotparser.RobotFileParser("https://vbpl.vn/robots.txt")
-    rp.read()
+    # fetch robots.txt with our User-Agent (the default Python UA gets 403, which robotparser treats as "disallow all")
+    rp = urllib.robotparser.RobotFileParser()
+    req = urllib.request.Request("https://vbpl.vn/robots.txt", headers={"User-Agent": UA})
+    rp.parse(urllib.request.urlopen(req, timeout=60).read().decode("utf-8", "ignore").splitlines())
+    assert not rp.can_fetch(UA, "https://vbpl.vn/api/x") and rp.can_fetch(UA, "https://vbpl.vn/van-ban/chi-tiet/x--1")
     sm = pd.read_parquet(args.sitemap)
     known = set(pd.read_parquet(args.known_ids, columns=["id"]).id)
     sel = sm[~sm.doc_id.isin(known)] if args.select == "new" else sm[sm.doc_id.isin(known)]
