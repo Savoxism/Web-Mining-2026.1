@@ -18,6 +18,35 @@ FACTS_HEADER = "THAY ĐỔI ĐÃ XÁC MINH"
 NOTICE_DELTA = float(os.environ.get("LEXGRAPH_NOTICE_DELTA", "inf"))
 # the clause counts as changed when the fine amounts differ or the token Jaccard of old vs new clause is below this
 NOTICE_JACCARD = float(os.environ.get("LEXGRAPH_NOTICE_JACCARD", "0.6"))
+
+# optional second check by the LLM itself: does the answer to *this question* differ between the two clauses?
+CHECK_PROMPT = """Câu hỏi: {q}
+
+Quy định cũ:
+{old}
+
+Quy định mới:
+{new}
+
+Theo quy định mới, câu trả lời cho câu hỏi trên có khác so với theo quy định cũ không (khác mức tiền, thời hạn, điều kiện,
+đối tượng, cơ quan có thẩm quyền hoặc thủ tục)? Nếu quy định mới không nói về nội dung của câu hỏi thì trả lời KHÔNG.
+Chỉ trả lời một từ: CÓ hoặc KHÔNG."""
+_CHECKER = None
+
+
+def set_fact_checker(client, model: str | None, thinking: bool = False) -> None:
+    """Enable (client, model) or disable (client=None) the LLM check of change facts."""
+    global _CHECKER
+    _CHECKER = None if client is None else (client, model, thinking)
+
+
+def llm_says_changed(client, model: str, question: str, old: str, new: str, thinking: bool = False) -> bool:
+    r = client.chat.completions.create(
+        model=model, temperature=0.0, max_tokens=2048 if thinking else 8,
+        messages=[{"role": "user", "content": CHECK_PROMPT.format(q=question, old=old[:2500], new=new[:2500])}],
+        extra_body={"chat_template_kwargs": {"enable_thinking": thinking}})
+    out = (r.choices[0].message.content or "").split("</think>")[-1].strip().upper()
+    return out.startswith("CÓ") or out.startswith("CO")
 NOTICE_RE = re.compile(r"\n*\s*(?:\*\*)?⚠️?\s*(?:\*\*)?\s*Thay đổi pháp luật.*", re.S)
 
 SYSTEM_PROMPT = """Bạn là trợ lý hỏi đáp pháp luật Việt Nam.
@@ -82,7 +111,8 @@ def change_fact(lg, old: dict, q_vec, q_exp: str, t: pd.Timestamp) -> dict | Non
             "new_doc": _s(new.so_ky_hieu), "new_art": art(_s(new.aid)),
             "new_amount": "–".join(mn[:2]) + " đồng" if mn else "",
             "since": _fmt_date(new.valid_from), "new_row": int(new_row), "old_ce": old_ce, "new_ce": new_ce,
-            "money_changed": money_changed, "jaccard": round(jac, 3)}
+            "money_changed": money_changed, "jaccard": round(jac, 3), "old_clause": old_clause[:2500],
+            "new_clause": new_clause[:2500]}
 
 
 def _fact_line(f: dict) -> str:
@@ -113,6 +143,9 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
                 if f is not None and f["new_ce"] == f["new_ce"] and f["old_ce"] == f["old_ce"] \
                         and f["new_ce"] < f["old_ce"] - NOTICE_DELTA:
                     f = None  # the new clause is not about the question: probably a wrong alignment
+                if f is not None and _CHECKER is not None and query and \
+                        not llm_says_changed(_CHECKER[0], _CHECKER[1], q_exp, f["old_clause"], f["new_clause"], _CHECKER[2]):
+                    f = None  # the wording differs but the answer to this question does not
                 if f is not None and (f["old_doc"], f["old_art"], f["new_doc"], f["new_art"]) not in fact_keys:
                     fact_keys.add((f["old_doc"], f["old_art"], f["new_doc"], f["new_art"]))
                     facts.append(f)

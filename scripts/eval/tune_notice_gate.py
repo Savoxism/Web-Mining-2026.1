@@ -41,6 +41,8 @@ def main() -> None:
     ap.add_argument("--judge-url", default="http://127.0.0.1:8200/v1")
     ap.add_argument("--judge-model", default="gpt-oss-120b")
     ap.add_argument("--workers", type=int, default=32)
+    ap.add_argument("--llm-url", default="http://127.0.0.1:8100/v1")
+    ap.add_argument("--llm-model", default="qwen3-4b")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     out = Path(args.out)
@@ -73,21 +75,22 @@ def main() -> None:
     items = stable + temporal
     print(f"{len(stable)} stable, {len(temporal)} temporal ({args.split})", flush=True)
 
+    keys = ["old_doc", "old_art", "new_doc", "new_art", "old_ce", "new_ce", "money_changed", "jaccard", "old_clause", "new_clause"]
     for it in items:
         res = lg.search(it["query"], t, w, k_rerank=30, top=20)
-        ctx, _ = L.build_context(res, lg, t, True, query=it["query"])
-        it["facts"] = []
-        # build_context keeps at most one fact; recover it with its CE scores
         q_exp = L.expand_query(it["query"])
         q_vec = lg.encode_queries([q_exp])[0]
-        if L.FACTS_HEADER in ctx:
-            for r in res.to_dict("records"):
-                if r["stale"] and L._s(r.get("successor_aid")):
-                    f = L.change_fact(lg, r, q_vec, q_exp, t)
-                    if f is not None and f"{f['old_doc']}, Điều {f['old_art']}" in ctx.split(L.FACTS_HEADER, 1)[1]:
-                        it["facts"].append({k: f[k] for k in ["old_doc", "old_art", "new_doc", "new_art", "old_ce", "new_ce",
-                                                              "money_changed", "jaccard"]})
-                        break
+        rows = res.to_dict("records")
+        # same candidate rule as lexgraph.llm.build_context: every old version that could yield the (single) fact
+        valid = [r for r in rows if not r["stale"]][:5]
+        aids = {L._s(r.get("aid")) for r in valid}
+        top_ce = max([r["ce_score"] for r in valid], default=0.0)
+        it["facts"] = []
+        for r in rows:
+            if r["stale"] and L._s(r.get("successor_aid")) and (r["successor_aid"] in aids or r["ce_score"] >= top_ce - 1.5):
+                f = L.change_fact(lg, r, q_vec, q_exp, t)
+                if f is not None:
+                    it["facts"].append({k: f[k] for k in keys})
 
     def jchanged(it):
         old = "\n\n".join(str(lg.corpus.text.iat[r])[:2500] for r in it["gold"][:2])
@@ -98,17 +101,31 @@ def main() -> None:
     with ThreadPoolExecutor(args.workers) as ex:
         list(ex.map(jchanged, temporal))
 
-    def rates(theta, delta=float("inf")):
+    # LLM check of every collected fact (Qwen3-4B, the answering model), with and without thinking
+    llm = OpenAI(base_url=args.llm_url, api_key="EMPTY")
+    facts = [(it, f) for it in items for f in it["facts"]]
+
+    def chk(job):
+        (it, f), th = job
+        f[f"llm_{'think' if th else 'fast'}"] = int(L.llm_says_changed(llm, args.llm_model, L.expand_query(it["query"]),
+                                                                    f["old_clause"], f["new_clause"], th))
+
+    with ThreadPoolExecutor(args.workers) as ex:
+        list(ex.map(chk, [(x, th) for x in facts for th in (False, True)]))
+
+    def rates(theta, delta=float("inf"), llm_mode=None):
         def keep(it):
-            return any((f["money_changed"] or f["jaccard"] < theta) and f["new_ce"] >= f["old_ce"] - delta for f in it["facts"])
+            return any((f["money_changed"] or f["jaccard"] < theta) and f["new_ce"] >= f["old_ce"] - delta
+                       and (llm_mode is None or f[f"llm_{llm_mode}"]) for f in it["facts"])
         fa = float(np.mean([keep(it) for it in stable]))
         ch = [it for it in temporal if it["changed"]]
         rec = float(np.mean([keep(it) for it in ch])) if ch else 0.0
         un = [it for it in temporal if not it["changed"]]
-        return {"jaccard_below": theta, "delta": delta, "false_alarm_stable": round(fa, 4), "recall_changed": round(rec, 4),
+        return {"jaccard_below": theta, "delta": delta, "llm_check": llm_mode, "false_alarm_stable": round(fa, 4), "recall_changed": round(rec, 4),
                 "notice_on_unchanged_temporal": round(float(np.mean([keep(it) for it in un])) if un else 0.0, 4)}
 
-    grid = [rates(th, d) for th in [0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.01] for d in [float("inf"), 4, 2]]
+    grid = [rates(th, d, m) for th in [0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.01] for d in [float("inf"), 4]
+            for m in [None, "fast", "think"]]
     ok = [g for g in grid if g["false_alarm_stable"] <= args.max_fa]
     pick = max(ok, key=lambda g: (g["recall_changed"], -g["false_alarm_stable"])) if ok else \
         min(grid, key=lambda g: g["false_alarm_stable"] - g["recall_changed"])
