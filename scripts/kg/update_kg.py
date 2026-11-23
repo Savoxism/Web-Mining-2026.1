@@ -28,7 +28,7 @@ from sentence_transformers import SentenceTransformer
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_amendments import clause_text, parse_doc  # noqa: E402
-from build_kg import html_to_lines, split_articles  # noqa: E402
+from build_kg import EXCLUDED_TYPES, html_to_lines, split_articles  # noqa: E402
 from extract_relations import Resolver, extract  # noqa: E402
 from lexgraph.temporal import chunk_article  # noqa: E402
 
@@ -54,7 +54,10 @@ def main() -> None:
     stats = {}
 
     pages = pd.read_parquet(args.pages)
-    pages = pages[(pages.content_html.str.len() > 0) & (~pages.is_translation.fillna(False).astype(bool))]
+    stats["crawled_pages"] = len(pages)
+    # same selection as the snapshot (build_kg.py): no translations, consolidated texts or non-normative types
+    pages = pages[(pages.content_html.str.len() > 0) & (~pages.is_translation.fillna(False).astype(bool))
+                  & (~pages.loai_van_ban.isin(EXCLUDED_TYPES))]
     stats["new_documents"] = len(pages)
 
     # ---------------- documents
