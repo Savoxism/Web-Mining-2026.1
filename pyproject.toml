@@ -10,10 +10,21 @@ dependencies = [
     "bm25s>=0.2",
     "pyvi>=0.1.1",
     "tqdm>=4.66",
+    "lxml>=5.3",
+    "networkx>=3.4",
+    "scipy>=1.14",
 ]
 
 [project.optional-dependencies]
 dense = [
-    "torch>=2.4",
+    "torch>=2.6",
     "sentence-transformers>=3.3",
+    "datasets>=3.0",
+    "accelerate>=1.0",
+]
+demo = [
+    "streamlit>=1.40",
+    "openai>=1.50",
+    "pyvis>=0.3.2",
+    "plotly>=5.24",
 ]
