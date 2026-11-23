@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
 from lexgraph.query import expand_query
+
+MONEY = re.compile(r"(\d{1,3}(?:\.\d{3})+)\s*đồng")
+TOK = re.compile(r"\w+", re.UNICODE)
+FACTS_HEADER = "THAY ĐỔI ĐÃ XÁC MINH"
+NOTICE_RE = re.compile(r"\n*\s*(?:\*\*)?⚠️?\s*(?:\*\*)?\s*Thay đổi pháp luật.*", re.S)
 
 SYSTEM_PROMPT = """Bạn là trợ lý hỏi đáp pháp luật Việt Nam.
 Quy tắc:
 1. Chỉ trả lời dựa trên các trích đoạn văn bản pháp luật được cung cấp. Không dùng kiến thức bên ngoài.
 2. Mỗi ý quan trọng phải có trích dẫn dạng [số] tương ứng với trích đoạn, kèm số hiệu văn bản và điều, khoản.
-3. Ưu tiên các trích đoạn đang CÒN HIỆU LỰC tại thời điểm hỏi. Nếu một quy định đã bị sửa đổi, thay thế hoặc hết hiệu lực,
-   thêm mục "⚠️ Thay đổi pháp luật" nêu rõ: quy định cũ (văn bản, nội dung chính), quy định mới (văn bản, nội dung chính)
-   và thời điểm thay đổi.
+3. Trả lời theo các trích đoạn CÒN HIỆU LỰC tại thời điểm hỏi. Chỉ thêm mục "⚠️ Thay đổi pháp luật" khi có mục
+   "THAY ĐỔI ĐÃ XÁC MINH", và chỉ nêu đúng các thông tin trong mục đó (quy định cũ, quy định mới, thời điểm thay đổi).
 4. Nếu các trích đoạn không đủ căn cứ để trả lời, nói rõ "Không tìm thấy đủ căn cứ pháp lý" và không suy đoán.
 5. Trả lời ngắn gọn, rõ ràng, bằng tiếng Việt."""
 
@@ -23,6 +29,47 @@ def _s(x) -> str:
 
 def _fmt_date(x) -> str:
     return pd.Timestamp(x).strftime("%d/%m/%Y") if pd.notna(x) else "không rõ"
+
+
+def _body_tokens(text: str) -> set:
+    lines = [l for l in str(text).split("\n") if l.strip()]
+    return set(TOK.findall(" ".join(lines[1:]).lower())) if len(lines) > 1 else set(TOK.findall(str(text).lower()))
+
+
+def change_fact(lg, old: dict, q_vec, q_exp: str, t: pd.Timestamp) -> dict | None:
+    """Does the clause the question is about really differ between the old article and its successor?
+
+    Returns a fact record when it does (different fine amounts, or clearly different wording), else None."""
+    succ_rows = lg.rows_of_aid.get(_s(old.get("successor_aid")), [])
+    if not succ_rows:
+        return None
+    old_clause = lg.relevant_text(q_vec, _s(old.get("aid")), str(old.get("text", "")), n=1, query_text=q_exp)
+    if len(succ_rows) > 1 and lg.ce is not None:
+        import numpy as np
+        sc = lg.ce_scores(q_exp, np.array(succ_rows))
+        new_row = succ_rows[int(sc.argmax())]
+    else:
+        new_row = succ_rows[0]
+    new = lg.corpus.iloc[new_row]
+    new_clause = str(new.text)
+    mo, mn = MONEY.findall(old_clause), MONEY.findall(new_clause)
+    a, b = _body_tokens(old_clause), _body_tokens(new_clause)
+    jac = len(a & b) / max(1, len(a | b))
+    money_changed = bool(mo and mn and set(mo[:4]) != set(mn[:4]))
+    if not (money_changed or jac < 0.6):
+        return None
+    art = lambda aid: aid.split("#")[-1].split("~")[0] if "#" in aid else "?"  # noqa: E731
+    return {"old_doc": _s(old.get("so_ky_hieu")), "old_art": art(_s(old.get("aid"))),
+            "old_amount": "–".join(mo[:2]) + " đồng" if mo else "",
+            "new_doc": _s(new.so_ky_hieu), "new_art": art(_s(new.aid)),
+            "new_amount": "–".join(mn[:2]) + " đồng" if mn else "",
+            "since": _fmt_date(new.valid_from), "new_row": int(new_row)}
+
+
+def _fact_line(f: dict) -> str:
+    old = f"{f['old_doc']}, Điều {f['old_art']}" + (f" (mức {f['old_amount']})" if f["old_amount"] else "")
+    new = f"{f['new_doc']}, Điều {f['new_art']}" + (f" (mức {f['new_amount']})" if f["new_amount"] else "")
+    return f"- Quy định cũ: {old}. Quy định mới: {new}, hiệu lực từ {f['since']}."
 
 
 def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, n_sources: int = 5,
@@ -37,23 +84,27 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
         chosen = list(valid)
         chosen_aids = {_s(r.get("aid")) for r in chosen}
         top_ce = max([r["ce_score"] for r in valid], default=0.0)
-        n_old = 0
+        n_old, facts, fact_keys = 0, [], set()
         for r in rows:
             if n_old >= 3 or not (r["stale"] and _s(r.get("successor_aid"))):
                 continue
             # an old version is relevant if its successor is already a source, or it scores close to the best source
             if r["successor_aid"] in chosen_aids or r["ce_score"] >= top_ce - 1.5:
-                chosen.append(r)
-                n_old += 1
-                if r["successor_aid"] not in chosen_aids:
-                    succ_rows = lg.rows_of_aid.get(r["successor_aid"], [])
-                    if succ_rows:
-                        s = lg.corpus.iloc[succ_rows[0]].to_dict()
-                        s.update({"stale": False, "row": succ_rows[0]})
-                        chosen.append(s)
-                        chosen_aids.add(r["successor_aid"])
+                f = change_fact(lg, r, q_vec, q_exp, t) if q_vec is not None else None
+                if f is not None and (f["old_doc"], f["old_art"], f["new_doc"], f["new_art"]) not in fact_keys:
+                    fact_keys.add((f["old_doc"], f["old_art"], f["new_doc"], f["new_art"]))
+                    facts.append(f)
+                    chosen.append(r)
+                    n_old += 1
+                succ_row = f["new_row"] if f is not None else (lg.rows_of_aid.get(r["successor_aid"], [None])[0])
+                if succ_row is not None and r["successor_aid"] not in chosen_aids:
+                    s = lg.corpus.iloc[succ_row].to_dict()
+                    s.update({"stale": False, "row": succ_row})
+                    chosen.append(s)
+                    chosen_aids.add(r["successor_aid"])
     else:
         chosen = rows[:n_sources]
+        facts = []
 
     seen, uniq = set(), []
     for r in chosen:  # one block per article or chunk (the QA corpus repeats some articles)
@@ -98,17 +149,22 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
         blocks.append(f"{head}\n{text}")
         sources.append({"k": k, "doc": doc, "title": title, "aid": _s(r.get("aid")), "stale": bool(r.get("stale")),
                         "row": int(r["row"]) if _s(r.get("row")) else None})
-    return "\n\n".join(blocks), sources
+    ctx = "\n\n".join(blocks)
+    if time_aware and facts:
+        ctx += f"\n\n{FACTS_HEADER} (dựa trên khoản liên quan tới câu hỏi):\n" + "\n".join(_fact_line(f) for f in facts)
+    return ctx, sources
 
 
 def answer(client, model: str, question: str, context: str, t: pd.Timestamp, thinking: bool = False,
            max_tokens: int = 1024) -> str:
     user = (f"Thời điểm hỏi: {_fmt_date(t)}\n\nCác trích đoạn văn bản pháp luật:\n{context}\n\n"
             f"Câu hỏi: {expand_query(question)}")
-    if "ĐÃ HẾT HIỆU LỰC / BỊ THAY THẾ" in context:
-        user += ("\n\nLưu ý: có trích đoạn đã hết hiệu lực hoặc bị thay thế. Trả lời theo quy định còn hiệu lực, "
-                 "sau đó BẮT BUỘC thêm mục \"⚠️ Thay đổi pháp luật\" nêu quy định cũ (văn bản, nội dung chính), "
-                 "quy định mới (văn bản, nội dung chính) và thời điểm thay đổi.")
+    has_facts = FACTS_HEADER in context
+    if has_facts:
+        user += ("\n\nLưu ý: có mục THAY ĐỔI ĐÃ XÁC MINH. Trả lời theo quy định còn hiệu lực, sau đó thêm mục "
+                 "\"⚠️ Thay đổi pháp luật\" chỉ dựa đúng vào mục đó.")
+    else:
+        user += "\n\nLưu ý: không có thay đổi pháp luật đã xác minh; KHÔNG viết mục \"⚠️ Thay đổi pháp luật\"."
     resp = client.chat.completions.create(
         model=model,
         messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}],
@@ -120,4 +176,14 @@ def answer(client, model: str, question: str, context: str, t: pd.Timestamp, thi
     text = resp.choices[0].message.content or ""
     if "</think>" in text:
         text = text.split("</think>", 1)[1]
-    return text.strip()
+    return verify_notice(text.strip(), context)
+
+
+def verify_notice(text: str, context: str) -> str:
+    """Keep a change notice only when it is backed by verified change facts; add one if the model forgot it."""
+    if FACTS_HEADER not in context:
+        return NOTICE_RE.sub("", text).strip()
+    if "Thay đổi pháp luật" not in text:
+        facts = context.split(FACTS_HEADER, 1)[1].split("\n", 1)[1].strip()
+        text += "\n\n⚠️ Thay đổi pháp luật:\n" + facts
+    return text
