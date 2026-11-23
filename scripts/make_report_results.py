@@ -92,6 +92,14 @@ def main() -> None:
                       f"{f3(a['correct_refusals_oos'])} \\\\")
         lines.append("\\newcommand{\\ResLlmRows}{" + "\n".join(lr) + "}")
         lines.append(M("ResNAns", f"{ans['n_stable'] + ans['n_temporal'] + ans['n_out_of_scope']}"))
+        full = []
+        for a_, name in zip(ans["answers"], ["no retrieval", "plain RAG", "\\textbf{time-aware RAG (ours)}"]):
+            g = lambda k: f3(a_.get(k)) if a_.get(k) is not None else "--"  # noqa: E731
+            full.append(f"{name} & {g('citation_acc')} & {g('correct')} & {g('correct_temporal')} & {g('faithful')} & "
+                        f"{g('change_notice_recall_changed')} & {g('change_notice_false_alarm_stable')} & "
+                        f"{g('correct_refusals_oos')} \\\\")
+        lines.append("\\newcommand{\\ResLlmFullRows}{" + "\n".join(full) + "}")
+        lines.append(M("ResNChanged", f"{ans.get('n_temporal_changed', '--')}"))
         al = ans.get("alignment_audit", {})
         lines.append(M("ResAlignAcc", f3(al.get("accuracy"))))
         lines.append(M("ResAlignAccPct", f"{100 * al.get('accuracy', 0):.0f}\\%"))
