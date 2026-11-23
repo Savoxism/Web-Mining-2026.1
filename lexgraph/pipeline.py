@@ -30,6 +30,7 @@ class Weights:
     tau: float = 0.80
     use_ce: bool = True
     inject: bool = True
+    static: bool = False   # retrieve only from the original QA corpus (no successor articles)
 
 
 class LexGraph:
@@ -201,7 +202,10 @@ class LexGraph:
     def search(self, query: str, t: pd.Timestamp, w: Weights, k_retrieve: int = 100, k_rerank: int = 30,
                top: int = 10) -> pd.DataFrame:
         q = self.encode_queries([query])
-        ti, ts = self.retrieve(q, k=k_retrieve)
+        ti, ts = self.retrieve(q, k=k_retrieve * (3 if w.static else 1))
+        if w.static:
+            keep = self.corpus.source.to_numpy()[ti[0]] == "qa"
+            ti, ts = ti[:, keep][:, :k_retrieve], ts[:, keep][:, :k_retrieve]
         bi_score = dict(zip(ti[0].tolist(), ts[0].tolist()))
         rows = self.candidates(q[0], ti[0], t, w.tau, k_rerank, w.inject)
         if self.ce is not None and w.use_ce:
@@ -211,6 +215,9 @@ class LexGraph:
         stale, reasons, succs = self.status(rows, t, w.tau)
         prop = self.propagation(rows, base)
         final = self.combine(rows, base, stale, prop, w)
+        if w.static:  # a static system knows nothing about validity
+            stale = np.zeros(len(rows), dtype=bool)
+            reasons, succs = [""] * len(rows), [None] * len(rows)
         res = self.corpus.iloc[rows].copy()
         res["row"] = rows
         res["bi_score"] = [bi_score.get(int(r), float((self.emb[int(r)] @ q[0]).item())) for r in rows]

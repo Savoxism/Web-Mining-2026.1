@@ -31,7 +31,7 @@ LLM_MODEL = os.environ.get("LEXGRAPH_LLM_MODEL", "qwen3-4b")
 
 EXAMPLES = {
     "Câu hỏi thông thường": "Người lao động làm việc trong điều kiện bình thường được nghỉ hằng năm bao nhiêu ngày?",
-    "Câu hỏi về luật đã thay đổi": "Người điều khiển xe máy vượt đèn đỏ bị phạt bao nhiêu tiền?",
+    "Câu hỏi về luật đã thay đổi": "Người điều khiển xe mô tô, xe gắn máy vượt đèn đỏ bị phạt bao nhiêu tiền?",
 }
 
 st.set_page_config(page_title="LexGraph-VN", page_icon="⚖️", layout="wide")
@@ -127,9 +127,9 @@ with tab_qa:
 
     if go and question.strip():
         w = Weights(beta=beta if graph_on else 0.0, gamma=gamma if time_aware else 0.0, mu=mu if graph_on else 0.0,
-                    tau=tau, use_ce=use_ce, inject=time_aware)
+                    tau=tau, use_ce=use_ce, inject=time_aware, static=not time_aware)
         with st.spinner("Đang truy hồi và xếp hạng…"):
-            res = lg.search(question, t_q, w, k_rerank=k_rerank, top=15)
+            res = lg.search(question, t_q, w, k_rerank=k_rerank, top=20)
         st.session_state["last"] = (question, res, t_q, time_aware)
 
     if "last" in st.session_state:

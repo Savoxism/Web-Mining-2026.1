@@ -30,14 +30,23 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
     if time_aware:
         valid = [r for r in rows if not r["stale"]][:n_sources]
         chosen = list(valid)
-        for r in rows[:10]:
-            if r["stale"] and _s(r.get("successor_aid")) and len(chosen) < n_sources + 3:
+        chosen_aids = {_s(r.get("aid")) for r in chosen}
+        top_ce = max([r["ce_score"] for r in valid], default=0.0)
+        n_old = 0
+        for r in rows:
+            if n_old >= 3 or not (r["stale"] and _s(r.get("successor_aid"))):
+                continue
+            # an old version is relevant if its successor is already a source, or it scores close to the best source
+            if r["successor_aid"] in chosen_aids or r["ce_score"] >= top_ce - 1.5:
                 chosen.append(r)
-                succ_rows = lg.rows_of_aid.get(r["successor_aid"], [])
-                if succ_rows and not any(c.get("aid") == r["successor_aid"] for c in chosen):
-                    s = lg.corpus.iloc[succ_rows[0]].to_dict()
-                    s.update({"stale": False, "row": succ_rows[0], "is_successor_of": r.get("so_ky_hieu")})
-                    chosen.append(s)
+                n_old += 1
+                if r["successor_aid"] not in chosen_aids:
+                    succ_rows = lg.rows_of_aid.get(r["successor_aid"], [])
+                    if succ_rows:
+                        s = lg.corpus.iloc[succ_rows[0]].to_dict()
+                        s.update({"stale": False, "row": succ_rows[0]})
+                        chosen.append(s)
+                        chosen_aids.add(r["successor_aid"])
     else:
         chosen = rows[:n_sources]
 

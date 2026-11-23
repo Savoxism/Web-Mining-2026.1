@@ -139,7 +139,7 @@ def main() -> None:
 
     best = json.loads(Path(args.weights).read_text())["best_val"]
     w = Weights(beta=best["beta"], gamma=best["gamma"], mu=best["mu"], inject=True)
-    w_plain = Weights(inject=False)
+    w_plain = Weights(inject=False, static=True)
     lg = LexGraph(args.bi, args.ce)
     llm = OpenAI(base_url=args.llm_url, api_key="EMPTY")
     judge = OpenAI(base_url=args.judge_url, api_key="EMPTY")
@@ -167,7 +167,7 @@ def main() -> None:
 
     # ---------------- retrieval + contexts (sequential, GPU)
     for it in items:
-        r_ours = lg.search(it["query"], t, w, k_rerank=30, top=15)
+        r_ours = lg.search(it["query"], t, w, k_rerank=30, top=20)
         r_plain = lg.search(it["query"], t, w_plain, k_rerank=30, top=15)
         it["ctx_ours"], it["src_ours"] = build_context(r_ours, lg, t, True)
         it["ctx_plain"], it["src_plain"] = build_context(r_plain, lg, t, False)
