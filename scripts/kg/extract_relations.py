@@ -207,16 +207,16 @@ def main() -> None:
             if g or p:
                 ev[ty] = {"precision": round(len(g & p) / max(1, len(p)), 4), "recall": round(len(g & p) / max(1, len(g)), 4),
                           "gold": len(g), "pred": len(p)}
-        # typed edges that matter for validity: succession (replaces/repeals/partially_repeals/amends)
-        succ = ["replaces", "repeals", "partially_repeals", "amends"]
-        g = set(map(tuple, gold[gold.type.isin(succ)][["src", "dst"]].values))
-        p = set(map(tuple, pred[pred.type.isin(succ)][["src", "dst"]].values))
         # edges that close the validity of the target (both replaces and repeals do)
         exp = ["replaces", "repeals"]
         g = set(map(tuple, gold[gold.type.isin(exp)][["src", "dst"]].values))
         p = set(map(tuple, pred[pred.type.isin(exp)][["src", "dst"]].values))
         ev["expiry_edges"] = {"precision": round(len(g & p) / max(1, len(p)), 4), "recall": round(len(g & p) / max(1, len(g)), 4),
                               "gold": len(g), "pred": len(p)}
+        # typed edges that matter for validity: succession (replaces/repeals/partially_repeals/amends)
+        succ = ["replaces", "repeals", "partially_repeals", "amends"]
+        g = set(map(tuple, gold[gold.type.isin(succ)][["src", "dst"]].values))
+        p = set(map(tuple, pred[pred.type.isin(succ)][["src", "dst"]].values))
         ev["succession_edges"] = {"precision": round(len(g & p) / max(1, len(p)), 4), "recall": round(len(g & p) / max(1, len(g)), 4),
                                   "gold": len(g), "pred": len(p)}
         stats["evaluation_vs_portal"] = ev
