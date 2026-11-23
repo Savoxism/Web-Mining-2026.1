@@ -42,3 +42,8 @@
 
 # History
 - 2026-11-23: created (ACL run stopped by the user; both GPUs free).
+- 2026-11-23 17:12 (giờ VN): train_bi failed at NCCL init (NVLS multicast "operation cannot be performed in the
+  present state" under the CUDA MPS daemon). Old → new: environment only, NCCL_NVLS_ENABLE=0 added to
+  scripts/phase.sh (same setting the ACL project uses). Data, seed, batch and hyperparameters unchanged; the failed
+  log is kept in outputs/runs/finetune_v1_20261123/train_bi_failed_nvls/. Gradient checkpointing enabled for the
+  bi-encoder (per-device batch 64 x 5 texts x 512 tokens), which changes memory, not the objective.
