@@ -50,6 +50,14 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
     else:
         chosen = rows[:n_sources]
 
+    seen, uniq = set(), []
+    for r in chosen:  # one block per article (QA passages and chunks may repeat an article)
+        key = _s(r.get("aid")) or f"row{r.get('row')}"
+        if key not in seen:
+            seen.add(key)
+            uniq.append(r)
+    chosen = uniq
+
     blocks, sources = [], []
     for k, r in enumerate(chosen, start=1):
         doc = _s(r.get("so_ky_hieu")) or "văn bản chưa xác định"
@@ -74,6 +82,10 @@ def answer(client, model: str, question: str, context: str, t: pd.Timestamp, thi
            max_tokens: int = 1024) -> str:
     user = (f"Thời điểm hỏi: {_fmt_date(t)}\n\nCác trích đoạn văn bản pháp luật:\n{context}\n\n"
             f"Câu hỏi: {question}")
+    if "ĐÃ HẾT HIỆU LỰC / BỊ THAY THẾ" in context:
+        user += ("\n\nLưu ý: có trích đoạn đã hết hiệu lực hoặc bị thay thế. Trả lời theo quy định còn hiệu lực, "
+                 "sau đó BẮT BUỘC thêm mục \"⚠️ Thay đổi pháp luật\" nêu quy định cũ (văn bản, nội dung chính), "
+                 "quy định mới (văn bản, nội dung chính) và thời điểm thay đổi.")
     resp = client.chat.completions.create(
         model=model,
         messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}],
