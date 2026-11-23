@@ -18,8 +18,8 @@ import gzip
 import json
 import re
 import time
+import urllib.parse
 import urllib.request
-import urllib.robotparser
 from pathlib import Path
 
 import pandas as pd
@@ -27,6 +27,30 @@ from tqdm import tqdm
 
 UA = "Mozilla/5.0 (compatible; research-crawler; university course project)"
 PUSH_RE = re.compile(r'self\.__next_f\.push\(\[1,"(.*?)"\]\)</script>', re.S)
+
+
+class Robots:
+    """Minimal robots.txt evaluator for the "*" group, RFC 9309 longest-match semantics."""
+
+    def __init__(self, text: str):
+        self.rules, active = [], False
+        for line in text.splitlines():
+            line = line.split("#", 1)[0].strip()
+            if ":" not in line:
+                continue
+            k, v = (x.strip() for x in line.split(":", 1))
+            k = k.lower()
+            if k == "user-agent":
+                active = v == "*"
+            elif active and k in ("allow", "disallow") and v:
+                self.rules.append((k == "allow", v))
+
+    def allowed(self, path: str) -> bool:
+        match = [(len(p), allow) for allow, p in self.rules if path.startswith(p)]
+        if not match:
+            return True
+        longest = max(m[0] for m in match)
+        return any(allow for n, allow in match if n == longest)  # ties: allow wins (RFC 9309)
 
 
 def payload_text(html: str) -> str:
@@ -81,11 +105,11 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
-    # fetch robots.txt with our User-Agent (the default Python UA gets 403, which robotparser treats as "disallow all")
-    rp = urllib.robotparser.RobotFileParser()
+    # robots.txt fetched with our User-Agent (the default Python UA gets 403) and evaluated with the RFC 9309
+    # longest-match rule (urllib.robotparser uses first-match, which would let "Allow: /" override "Disallow: /api/").
     req = urllib.request.Request("https://vbpl.vn/robots.txt", headers={"User-Agent": UA})
-    rp.parse(urllib.request.urlopen(req, timeout=60).read().decode("utf-8", "ignore").splitlines())
-    assert not rp.can_fetch(UA, "https://vbpl.vn/api/x") and rp.can_fetch(UA, "https://vbpl.vn/van-ban/chi-tiet/x--1")
+    robots = Robots(urllib.request.urlopen(req, timeout=60).read().decode("utf-8", "ignore"))
+    assert not robots.allowed("/api/x") and not robots.allowed("/Pages/x") and robots.allowed("/van-ban/chi-tiet/x--1")
     sm = pd.read_parquet(args.sitemap)
     known = set(pd.read_parquet(args.known_ids, columns=["id"]).id)
     sel = sm[~sm.doc_id.isin(known)] if args.select == "new" else sm[sm.doc_id.isin(known)]
@@ -97,7 +121,7 @@ def main() -> None:
 
     rows, stats = [], {"fetched": 0, "cached": 0, "robots_blocked": 0, "failed": 0, "parsed": 0}
     for r in tqdm(sel.itertuples(index=False), total=len(sel), desc="crawl", mininterval=30):
-        if "/van-ban/chi-tiet/" not in r.url or not rp.can_fetch(UA, r.url):
+        if "/van-ban/chi-tiet/" not in r.url or not robots.allowed(urllib.parse.urlparse(r.url).path):
             stats["robots_blocked"] += 1
             continue
         cp = cache / f"{r.doc_id}.html.gz"
