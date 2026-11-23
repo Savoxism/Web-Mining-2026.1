@@ -41,6 +41,7 @@ def main() -> None:
     ap.add_argument("--max-words", type=int, default=300)
     ap.add_argument("--topn", type=int, default=3)
     ap.add_argument("--batch-size", type=int, default=256)
+    ap.add_argument("--device", default="cuda")
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -75,7 +76,7 @@ def main() -> None:
             frontier = nxt
         return {s for s in seen if s in has_arts}
 
-    linked = links[links.status == "matched"].copy()
+    linked = links[(links.status == "matched") & links.cid.isin(set(corpus.cid))].copy()
     linked["succ_docs"] = linked.doc_id.map(lambda d: successors(d))
     need = linked[linked.succ_docs.map(len) > 0].reset_index(drop=True)
     succ_docs = set().union(*need.succ_docs) if len(need) else set()
@@ -92,8 +93,9 @@ def main() -> None:
     print(f"[{time.time()-t0:.0f}s] {len(sa)} successor articles -> {len(chunks)} chunks", flush=True)
 
     # ---------------- encode
-    model = SentenceTransformer(args.model, revision=args.revision, device="cuda")
-    model.half()
+    model = SentenceTransformer(args.model, revision=args.revision, device=args.device)
+    if args.device == "cuda":
+        model.half()
     model.max_seq_length = 512
     text_of = corpus.set_index("cid").text
     p_emb = model.encode([text_of[c] for c in need.cid], batch_size=args.batch_size, normalize_embeddings=True,
