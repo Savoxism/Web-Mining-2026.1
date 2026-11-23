@@ -25,6 +25,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="outputs/final_report_data")
     ap.add_argument("--baselines", default="outputs/runs/baselines_v2_20261124/metrics")
+    ap.add_argument("--failures", default="outputs/runs/notices_v2_20261123/eval_answers_final2/metrics/failure_modes.json")
     ap.add_argument("--out", default="docs/final_report/data.tex")
     args = ap.parse_args()
     d = Path(args.data)
@@ -169,6 +170,30 @@ def main() -> None:
     L.append(M("AmArtFound", f"{100 * am['target_article_found']:.1f}"))
     ops = am["op_types"]
     L.append(M("AmOpCoords", " ".join(f"({v},{{{k}}})" for k, v in sorted(ops.items(), key=lambda x: -x[1]) if k != "Thay")))
+
+    # ---------------- failure modes of the time-aware answers
+    fm = load(args.failures)
+    if fm:
+        c, sub = fm["causes"], fm.get("misread_subtypes", {})
+        bars = [("wrong clause / number", sub.get("wrong_clause_or_number", 0)), ("incomplete rule", sub.get("incomplete", 0)),
+                ("unsupported claim", sub.get("unsupported_claim", 0)), ("retrieval miss", c.get("retrieval miss", 0)),
+                ("outdated source cited", c.get("outdated source cited", 0)), ("wrong refusal", c.get("wrong refusal", 0))]
+        L.append(M("FmSyms", ",".join(f"f{i}" for i in range(len(bars)))))
+        L.append(M("FmLabels", ",".join("{" + n + "}" for n, _ in bars)))
+        L.append(M("FmCoords", " ".join(f"({v},f{i})" for i, (_, v) in enumerate(bars))))
+        L.append(M("FmWrong", f"{fm['wrong']}"))
+        L.append(M("FmInScope", f"{fm['in_scope']}"))
+        L.append(M("FmMisread", f"{c.get('misread / incomplete', 0)}"))
+        L.append(M("FmRetrieval", f"{c.get('retrieval miss', 0)}"))
+        L.append(M("FmOutdated", f"{c.get('outdated source cited', 0)}"))
+        L.append(M("FmRefusal", f"{c.get('wrong refusal', 0)}"))
+        L.append(M("FmClause", f"{sub.get('wrong_clause_or_number', 0)}"))
+        L.append(M("FmIncomplete", f"{sub.get('incomplete', 0)}"))
+        L.append(M("FmUnsupported", f"{sub.get('unsupported_claim', 0)}"))
+        L.append(M("FmFalse", f"{fm['false_notices']}"))
+        L.append(M("FmMissed", f"{fm['missed_notices']}"))
+        L.append(M("FmMissedNoFact", f"{fm['missed_without_fact']}"))
+        L.append(M("FmChanged", f"{fm['changed']}"))
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text("\n".join(L) + "\n")
