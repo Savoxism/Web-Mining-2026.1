@@ -27,6 +27,7 @@ def main() -> None:
     ap.add_argument("--baselines", default="outputs/runs/baselines_v2_20261124/metrics")
     ap.add_argument("--failures", default="outputs/runs/notices_v2_20261123/eval_answers_final2/metrics/failure_modes.json")
     ap.add_argument("--judge2", default="outputs/runs/final_judge_20261124/rejudge.json")
+    ap.add_argument("--answers", default="outputs/runs/notices_v2_20261123/eval_answers_final2/metrics/metrics.json")
     ap.add_argument("--out", default="docs/final_report/data.tex")
     args = ap.parse_args()
     d = Path(args.data)
@@ -213,6 +214,18 @@ def main() -> None:
         L.append(M("JTwoCorrect", f"{o['correct']:.3f}"))
         L.append(M("JTwoCorrectT", f"{o['correct_temporal']:.2f}"))
         L.append(M("JTwoPlainCorrect", f"{j2['settings']['plain']['correct']:.3f}"))
+
+    # ---------------- answers figure (two judges)
+    ans = load(args.answers)
+    if ans and j2:
+        g = {r["setting"]: r for r in ans["answers"]}
+        keys = [("none", "Qwen3-4B, no retrieval"), ("plain", "Qwen3-4B + plain RAG"), ("ours", "Qwen3-4B + time-aware RAG (ours)")]
+        for k, name in keys:
+            a1, a2 = g[name], j2["settings"][k]
+            L.append(M(f"AnsA{k.capitalize()}", f"(goall,{a1['correct']:.3f}) (gochg,{a1['correct_temporal']:.3f}) "
+                                                 f"(qwall,{a2['correct']:.3f}) (qwchg,{a2['correct_temporal']:.3f})"))
+            L.append(M(f"AnsB{k.capitalize()}", f"(cite,{a1['citation_acc'] or 0:.3f}) (faith,{a1['faithful']:.3f}) "
+                                                 f"(faithq,{a2['faithful']:.3f}) (refuse,{a1['correct_refusals_oos']:.3f})"))
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text("\n".join(L) + "\n")
