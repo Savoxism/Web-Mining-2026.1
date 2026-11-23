@@ -74,6 +74,13 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
                 note = f"còn hiệu lực tại {_fmt_date(t)} (hiệu lực từ {_fmt_date(r.get('valid_from'))})"
             head += f"\nTình trạng: {note}"
         text = str(r.get("text", ""))[:max_chars]
+        versions = getattr(lg, "versions", None)
+        if time_aware and versions is not None and not r.get("stale") and aid:
+            am = versions.amendments(aid, t)
+            am = am[am.new_text.notna()].tail(2)
+            for a in am.itertuples(index=False):
+                text += (f"\n[Sửa đổi bởi {a.amend_num}, hiệu lực từ {_fmt_date(a.amend_from)}: {a.op} {a.spec}]\n"
+                         f"{str(a.new_text)[:700]}")
         blocks.append(f"{head}\n{text}")
         sources.append({"k": k, "doc": doc, "title": title, "aid": _s(r.get("aid")), "stale": bool(r.get("stale")),
                         "row": int(r["row"]) if _s(r.get("row")) else None})

@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 from lexgraph.llm import answer, build_context  # noqa: E402
 from lexgraph.pipeline import LexGraph, Weights  # noqa: E402
+from lexgraph.versions import VersionIndex, money_change, word_diff_html  # noqa: E402
 
 BI = os.environ.get("LEXGRAPH_BI", "BAAI/bge-m3")
 BI_REV = os.environ.get("LEXGRAPH_BI_REV") or None
@@ -39,7 +40,9 @@ st.set_page_config(page_title="LexGraph-VN", page_icon="⚖️", layout="wide")
 
 @st.cache_resource(show_spinner="Đang nạp mô hình và knowledge graph…")
 def load():
-    return LexGraph(BI, CE, bi_revision=BI_REV, ce_revision=CE_REV)
+    lg = LexGraph(BI, CE, bi_revision=BI_REV, ce_revision=CE_REV)
+    lg.versions = VersionIndex("data/kg/amendments.parquet")
+    return lg
 
 
 @st.cache_resource
@@ -112,7 +115,40 @@ st.sidebar.caption(f"Bi-encoder: `{BI}`  \nCross-encoder: `{CE}`  \nLLM: `{LLM_M
 
 lg = load()
 
-tab_qa, tab_kg = st.tabs(["Hỏi đáp", "Knowledge graph"])
+tab_qa, tab_tt, tab_kg = st.tabs(["Hỏi đáp", "⏳ Time-travel", "Knowledge graph"])
+
+
+def show_history(lg, aid: str, t):
+    """Version timeline of an article with clause-level diffs."""
+    events = lg.versions.timeline(aid, lg, t)
+    if len(events) <= 1:
+        st.caption("Không có sửa đổi hay thay thế nào được ghi nhận cho điều luật này.")
+        return
+    for e in events:
+        date = fmt_date(e["date"])
+        if e["kind"] == "ban hành / có hiệu lực":
+            st.markdown(f"🟦 **{date}** · {e['doc']} · bản gốc")
+        elif e["kind"] == "thay thế bởi điều luật mới":
+            st.markdown(f"🟥 **{date}** · thay thế bởi **{e['doc']}** (Điều {e['aid'].split('#')[-1]}, độ khớp {e['sim']:.2f}"
+                        f"{', dẫn chiếu tường minh' if e['explicit'] else ''})")
+            old_rows, new_rows = lg.rows_of_aid.get(aid, []), lg.rows_of_aid.get(e["aid"], [])
+            if old_rows and new_rows:
+                old_t = str(lg.corpus.text.iat[old_rows[0]])[:2500]
+                new_t = "\n".join(str(lg.corpus.text.iat[x]) for x in new_rows[:2])[:2500]
+                note = money_change(old_t, new_t)
+                if note:
+                    st.caption(f"Mức tiền thay đổi: {note}")
+                with st.expander("Diff toàn điều (đỏ: bỏ, xanh: thêm)"):
+                    st.markdown(word_diff_html(old_t, new_t), unsafe_allow_html=True)
+        else:
+            where = " ".join(x for x in [f"khoản {e['clause']}" if e.get("clause") else "",
+                                         f"điểm {e['points']}" if e.get("points") else ""] if x)
+            st.markdown(f"🟨 **{date}** · **{e['doc']}** · {e['kind']} {where}")
+            if e.get("old") or e.get("new"):
+                note = money_change(e.get("old"), e.get("new"))
+                if note:
+                    st.caption(f"Mức tiền thay đổi: {note}")
+                st.markdown(word_diff_html(e.get("old"), e.get("new")), unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ QA tab
 with tab_qa:
@@ -178,9 +214,55 @@ with tab_qa:
                 st.caption(f"bi-encoder {r.bi_score:.3f} · cross-encoder {r.ce_score:.2f} · PageRank z {r.pagerank_z:.2f} · "
                            f"lan truyền {r.propagation:.2f}")
 
+        st.subheader("Lịch sử phiên bản")
+        shown = []
+        for r in res.itertuples():
+            a = str(r.aid) if isinstance(r.aid, str) else ""
+            a = a.split("~")[0]
+            if a and a not in shown and (r.stale or len(lg.versions.amendments(a)) > 0):
+                shown.append(a)
+            if len(shown) >= 2:
+                break
+        if not shown:
+            st.caption("Các điều luật được truy hồi chưa từng bị sửa đổi hay thay thế.")
+        for a in shown:
+            d = lg.docs.so_ky_hieu.get(a.split("#")[0], "")
+            with st.expander(f"{d} · Điều {a.split('#')[-1]}", expanded=True):
+                show_history(lg, a, t_used)
+
         st.subheader("Đồ thị quan hệ giữa các văn bản")
         st.caption("Xanh: còn hiệu lực tại thời điểm hỏi · Vàng: hết hiệu lực. Mũi tên đi từ văn bản mới tới văn bản bị tác động.")
         components.html(graph_html(lg, res.doc_id.dropna().unique().tolist()[:8], t_used), height=540)
+
+# ------------------------------------------------------------------ time-travel tab
+with tab_tt:
+    st.title("⏳ Cùng một câu hỏi, ở những thời điểm khác nhau")
+    tt_q = st.text_input("Câu hỏi", value=EXAMPLES["Câu hỏi về luật đã thay đổi"], key="tt_q")
+    c = st.columns(3)
+    dates = [c[0].date_input("Mốc 1", value=date(2021, 6, 1), format="DD/MM/YYYY", key="d1"),
+             c[1].date_input("Mốc 2", value=date(2023, 6, 1), format="DD/MM/YYYY", key="d2"),
+             c[2].date_input("Mốc 3", value=date.today(), format="DD/MM/YYYY", key="d3")]
+    tt_llm = st.toggle("Sinh câu trả lời ở mỗi mốc (Qwen3-4B)", value=True, key="tt_llm")
+    if st.button("So sánh theo thời gian", type="primary"):
+        w = Weights(beta=beta, gamma=gamma, mu=mu, tau=tau, use_ce=True, inject=True)
+        cols = st.columns(3)
+        for col, dte in zip(cols, dates):
+            tq = pd.Timestamp(dte)
+            with col:
+                st.markdown(f"#### {fmt_date(tq)}")
+                with st.spinner("Đang truy hồi…"):
+                    r = lg.search(tt_q, tq, w, k_rerank=k_rerank, top=20)
+                valid = r[~r.stale].head(3)
+                for x in valid.itertuples():
+                    art = str(x.aid).split("#")[-1].split("~")[0] if isinstance(x.aid, str) else "?"
+                    st.markdown(f"🟢 **{x.so_ky_hieu}**, Điều {art}  \n<span style='color:gray;font-size:0.85em'>"
+                                f"hiệu lực {fmt_date(x.valid_from)} → {fmt_date(x.valid_to)}</span>", unsafe_allow_html=True)
+                if tt_llm:
+                    ctx, _ = build_context(r, lg, tq, True, n_sources=n_sources)
+                    try:
+                        st.info(answer(llm_client(), LLM_MODEL, tt_q, ctx, tq, max_tokens=400))
+                    except Exception as ex:
+                        st.caption(f"Không gọi được LLM ({type(ex).__name__}).")
 
 # ------------------------------------------------------------------ KG tab
 with tab_kg:
