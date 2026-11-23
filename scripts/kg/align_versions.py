@@ -111,8 +111,7 @@ def main() -> None:
     # ---------------- judge labels (stratified by rank and similarity)
     S["sim_bin"] = pd.cut(S.sim, [0, 0.6, 0.7, 0.8, 0.9, 1.01], labels=False)
     per = max(1, args.n_label // (3 * 5))
-    lab = S.groupby(["rank", "sim_bin"], group_keys=False).apply(
-        lambda g: g.sample(min(len(g), per), random_state=args.seed))
+    lab = S.sample(frac=1.0, random_state=args.seed).groupby(["rank", "sim_bin"]).head(per).copy()
     client = OpenAI(base_url=args.judge_url, api_key="EMPTY")
 
     def judge(i):
