@@ -148,13 +148,16 @@ def extract(title: str, html: str, own_id: str | None, res: Resolver, issued=Non
             sn = mentions(sent, res, issued)
             if not sn:
                 continue
-            if "thay thế" in sl:
+            passive = re.search(r"(được|đã được|đã)\s+(sửa đổi|bổ sung|thay thế|bãi bỏ)[^.;]{0,80}?\bbởi\b", sl) is not None
+            if passive:  # "X đã được sửa đổi, bổ sung bởi Y": another document acts on X
+                add(sn, "cites")
+            elif "thay thế" in sl:
                 add(sn, "replaces")
             elif "hết hiệu lực" in sl or "bãi bỏ" in sl:
                 partial = "bãi bỏ" in sl and re.search(r"(điều|khoản|điểm)\s+\d+", sl.split("bãi bỏ", 1)[-1]) is not None
                 add(sn, "partially_repeals" if partial else "repeals")
-            elif "sửa đổi" in sl or "bổ sung" in sl:
-                add(sn, "amends")
+            elif re.match(r"^[\"“]?\s*(điều\s+\d+[a-zđ]?\.?\s*)?(\d+\.\s*)?(sửa đổi|bổ sung)", sl) or "như sau" in sl:
+                add(sn, "amends")  # the document itself performs the amendment
             elif "quy định chi tiết" in sl or "hướng dẫn thi hành" in sl:
                 add(sn, "guides")
             else:
@@ -208,6 +211,12 @@ def main() -> None:
         succ = ["replaces", "repeals", "partially_repeals", "amends"]
         g = set(map(tuple, gold[gold.type.isin(succ)][["src", "dst"]].values))
         p = set(map(tuple, pred[pred.type.isin(succ)][["src", "dst"]].values))
+        # edges that close the validity of the target (both replaces and repeals do)
+        exp = ["replaces", "repeals"]
+        g = set(map(tuple, gold[gold.type.isin(exp)][["src", "dst"]].values))
+        p = set(map(tuple, pred[pred.type.isin(exp)][["src", "dst"]].values))
+        ev["expiry_edges"] = {"precision": round(len(g & p) / max(1, len(p)), 4), "recall": round(len(g & p) / max(1, len(g)), 4),
+                              "gold": len(g), "pred": len(p)}
         ev["succession_edges"] = {"precision": round(len(g & p) / max(1, len(p)), 4), "recall": round(len(g & p) / max(1, len(g)), 4),
                                   "gold": len(g), "pred": len(p)}
         stats["evaluation_vs_portal"] = ev
