@@ -131,6 +131,7 @@ def main() -> None:
     ap.add_argument("--val-queries", type=int, default=1500)
     ap.add_argument("--test-queries", type=int, default=0, help="0 = all")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--no-graph", action="store_true", help="time signals only (beta = mu = 0 everywhere)")
     args = ap.parse_args()
     t0 = time.time()
     out = Path(args.out)
@@ -152,7 +153,8 @@ def main() -> None:
     print(f"[{time.time()-t0:.0f}s] test prepared", flush=True)
 
     grid = []
-    for beta, gamma, mu in itertools.product([0, 0.1, 0.25, 0.5, 1.0], [0, 0.5, 1, 2, 4, 8], [0, 0.5, 1, 2]):
+    betas, mus = ([0], [0]) if args.no_graph else ([0, 0.1, 0.25, 0.5, 1.0], [0, 0.5, 1, 2])
+    for beta, gamma, mu in itertools.product(betas, [0, 0.5, 1, 2, 4, 8], mus):
         r = score(lg, v_items, Weights(beta=beta, gamma=gamma, mu=mu, tau=args.tau, inject=True), args.k_rerank, use_ce=use_ce)
         grid.append({"beta": beta, "gamma": gamma, "mu": mu, **r})
     grid = pd.DataFrame(grid)
@@ -164,11 +166,13 @@ def main() -> None:
 
     V = []
     V.append(("retriever + re-ranker", Weights(inject=False), "main"))
-    V.append(("+ graph (beta, mu)", Weights(beta=float(bg.beta), mu=float(bg.mu), inject=False), "main"))
+    if not args.no_graph:
+        V.append(("+ graph (beta, mu)", Weights(beta=float(bg.beta), mu=float(bg.mu), inject=False), "main"))
     V.append(("+ time (gamma, injection)", Weights(gamma=float(tg.gamma), inject=True), "main"))
     V.append(("full (graph + time)", Weights(beta=B, gamma=G, mu=M, inject=True), "main"))
-    V.append(("full - PageRank", Weights(beta=0, gamma=G, mu=M, inject=True), "main"))
-    V.append(("full - propagation", Weights(beta=B, gamma=G, mu=0, inject=True), "main"))
+    if not args.no_graph:
+        V.append(("full - PageRank", Weights(beta=0, gamma=G, mu=M, inject=True), "main"))
+        V.append(("full - propagation", Weights(beta=B, gamma=G, mu=0, inject=True), "main"))
     V.append(("full - successor injection", Weights(beta=B, gamma=G, mu=M, inject=False), "main"))
     V.append(("full - explicit references", Weights(beta=B, gamma=G, mu=M, inject=True), "no_explicit"))
     V.append(("full, amends edges only", Weights(beta=B, gamma=G, mu=M, inject=True), "amends_only"))
