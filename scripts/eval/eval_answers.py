@@ -22,6 +22,7 @@ Usage (needs the Qwen3-4B server and the judge server):
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -87,6 +88,19 @@ Proposed new article (from a later amending/replacing document):
 
 Return {{"same_provision": 0 or 1}}: 1 if the new article regulates the same legal matter as the old one, so that it
 updates, replaces or amends it; 0 otherwise."""
+
+
+JUDGE_CHANGED = """You are comparing two versions of a Vietnamese legal provision for one question. Reply with a JSON object only.
+Question: {q}
+
+Old version (in force earlier):
+{old}
+
+Current version (in force at {t}):
+{new}
+
+Return {{"changed": 0 or 1}}: 1 if the answer to the question differs between the two versions (e.g. a different amount,
+time limit, condition, competent authority or procedure); 0 if the answer is the same in substance."""
 
 
 def chat(client, model, prompt, max_tokens=512):
@@ -205,6 +219,16 @@ def main() -> None:
     with ThreadPoolExecutor(args.workers) as ex:
         list(ex.map(jqa, [(it, s) for it in in_scope for s in ["none", "plain", "ours"]]))
 
+    # did the answer to a temporal question really change? (a notice is only expected then)
+    def jchanged(it):
+        old = "\n\n".join(str(lg.corpus.text.iat[r])[:2500] for r in it["gold"][:2])
+        txt = chat(judge, args.judge_model, JUDGE_CHANGED.format(q=it["query"], old=old, new=ref_text(it), t=args.t_eval),
+                   max_tokens=256)
+        it["changed"] = parse_json(txt, ["changed"])["changed"]
+
+    with ThreadPoolExecutor(args.workers) as ex:
+        list(ex.map(jchanged, [it for it in in_scope if it["kind"] == "temporal"]))
+
     # ---------------- metrics
     def has_notice(a):
         return ("thay đổi pháp luật" in a.lower()) or ("⚠" in a)
@@ -232,14 +256,17 @@ def main() -> None:
             "faithful": round(float(np.mean([it[f"judge_{s}"]["faithful"] for it in in_scope])), 3),
             "change_notice_temporal": round(float(np.mean([has_notice(it[f"ans_{s}"]) for it in tmp])), 3),
             "change_notice_false_alarm_stable": round(float(np.mean([has_notice(it[f"ans_{s}"]) for it in stb])), 3),
+            "change_notice_recall_changed": round(float(np.mean([has_notice(it[f"ans_{s}"]) for it in tmp if it["changed"]] or [0])), 3),
+            "change_notice_on_unchanged_temporal": round(float(np.mean([has_notice(it[f"ans_{s}"]) for it in tmp if not it["changed"]] or [0])), 3),
             "correct_refusals_oos": round(float(np.mean([refused(it[f"ans_{s}"]) for it in oos])), 3),
             "over_refusals_in_scope": round(float(np.mean([refused(it[f"ans_{s}"]) for it in in_scope])), 3),
         })
-    metrics = {"answers": rows, "n_stable": len(stable), "n_temporal": len(temporal), "n_out_of_scope": len(OUT_OF_SCOPE)}
+    metrics = {"answers": rows, "n_stable": len(stable), "n_temporal": len(temporal), "n_out_of_scope": len(OUT_OF_SCOPE),
+               "n_temporal_changed": int(sum(it["changed"] for it in temporal)), "successors": lg.succ_version}
 
     # ---------------- alignment audit
-    succ = pd.read_parquet("data/kg/temporal/successors.parquet")
-    cand = succ[(succ["rank"] == 0) & ((succ.sim >= w.tau) | succ.explicit)]
+    succ = pd.read_parquet(Path("data/kg/temporal") / os.environ.get("LEXGRAPH_SUCCESSORS", "successors.parquet"))
+    cand = succ[succ.accept] if lg.succ_version == "v2" else succ[(succ["rank"] == 0) & ((succ.sim >= w.tau) | succ.explicit)]
     cand = cand[cand.succ_aid.map(lambda a: bool(lg.rows_of_aid.get(a)))]
     sample = cand.sample(min(args.n_align, len(cand)), random_state=42)
 
