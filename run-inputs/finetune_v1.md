@@ -47,3 +47,7 @@
   scripts/phase.sh (same setting the ACL project uses). Data, seed, batch and hyperparameters unchanged; the failed
   log is kept in outputs/runs/finetune_v1_20261123/train_bi_failed_nvls/. Gradient checkpointing enabled for the
   bi-encoder (per-device batch 64 x 5 texts x 512 tokens), which changes memory, not the objective.
+- 2026-11-23 17:25 (giờ VN): train_bi failed at step 1 (DDP: XLM-R pooler parameters 389/390 receive no gradient).
+  Old → new: ddp_find_unused_parameters False → True, non-reentrant gradient checkpointing. Objective, data, seed and
+  batch unchanged. Zero-shot val (2,000 questions) from that run: MRR@10 0.619, Recall@100 0.930. Failed log kept in
+  train_bi_failed_ddp/.

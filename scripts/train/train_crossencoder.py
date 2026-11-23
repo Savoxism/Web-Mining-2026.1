@@ -85,6 +85,7 @@ def main() -> None:
         dataloader_num_workers=2,
         ddp_find_unused_parameters=False,
         gradient_checkpointing=args.grad_ckpt,
+        gradient_checkpointing_kwargs={"use_reentrant": False} if args.grad_ckpt else None,
     )
     if rank == 0:
         info = {"world_size": world, "global_batch": world * args.per_device_batch * args.grad_accum,

@@ -89,8 +89,9 @@ def main() -> None:
         seed=args.seed,
         report_to="none",
         dataloader_num_workers=2,
-        ddp_find_unused_parameters=False,
+        ddp_find_unused_parameters=True,  # the XLM-R pooler is not used by sentence-transformers
         gradient_checkpointing=args.grad_ckpt,
+        gradient_checkpointing_kwargs={"use_reentrant": False} if args.grad_ckpt else None,
     )
     if rank == 0:
         info = {"world_size": world, "per_device_batch": args.per_device_batch, "grad_accum": args.grad_accum,
