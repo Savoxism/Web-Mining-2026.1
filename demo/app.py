@@ -169,12 +169,12 @@ if "last" in st.session_state:
     for (_, art, stale), members in groups.items():
         r = members[0][1]
         ks = ", ".join(str(k) for k, _ in members)
-        name = doc_name(str(r.so_ky_hieu), r.loai_van_ban) if isinstance(r.so_ky_hieu, str) else "Unlinked passage"
-        if stale:
-            status = "<span class='old'>older version, since replaced</span>"
-        else:
-            status = f"<span class='ok'>in force since {fmt_date(r.valid_from)}</span>"
-        st.markdown(f"<div class='src'>[{ks}] <b>{html.escape(name)}</b>, Art. {art} · {status}</div>",
-                    unsafe_allow_html=True)
+        if isinstance(r.so_ky_hieu, str):
+            name = f"<b>{html.escape(doc_name(str(r.so_ky_hieu), r.loai_van_ban))}</b>, Art. {art}"
+            status = "<span class='old'>older version, since replaced</span>" if stale else \
+                f"<span class='ok'>in force since {fmt_date(r.valid_from)}</span>"
+        else:  # QA passage that could not be linked to a document on the portal
+            name, status = "<b>Legal passage</b>", "<span class='old'>source document not identified</span>"
+        st.markdown(f"<div class='src'>[{ks}] {name} · {status}</div>", unsafe_allow_html=True)
         with st.expander("Original text (Vietnamese)", expanded=False):
             st.text("\n…\n".join(str(m.text)[:3000] for _, m in members))
