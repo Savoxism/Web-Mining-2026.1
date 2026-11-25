@@ -62,22 +62,22 @@ Quy tắc:
 4. Nếu các trích đoạn không đủ căn cứ để trả lời, nói rõ "Không tìm thấy đủ căn cứ pháp lý" và không suy đoán.
 5. Trả lời ngắn gọn, rõ ràng, bằng tiếng Việt."""
 
-# English answers for the demo. The change notice is not written by the model: the app shows the verified
-# change facts itself, so the model only answers under the law in force.
-SYSTEM_PROMPT_EN = """You answer questions about Vietnamese law.
-Rules:
-1. Use only the Vietnamese legal excerpts provided. Do not use outside knowledge.
-2. Cite every key point as [k], matching the excerpt number, with the document number and article.
-3. Answer under the excerpts that are IN FORCE at the question date. Do not write about older rules or legal changes.
-4. If the excerpts are not enough, say "No sufficient legal basis was found." and do not guess.
-5. Answer briefly and clearly in English. Write amounts as in "4,000,000 to 6,000,000 VND". Keep document numbers
-   as written (e.g. 168/2024/NĐ-CP)."""
-
-TRANSLATE_PROMPT = """Translate this question about Vietnamese law into Vietnamese, using the wording of Vietnamese legal
-texts (e.g. "motorbike" -> "xe mô tô, xe gắn máy", "run a red light" -> "vượt đèn đỏ", "annual leave" -> "nghỉ hằng năm").
+# English for the demo: the question is translated into Vietnamese for retrieval, the answer is written in Vietnamese
+# exactly as in the evaluated system, and then translated into English (Qwen3-4B reads Vietnamese clauses more
+# reliably when it answers in Vietnamese). The change note is shown by the app from the verified change facts.
+TRANSLATE_Q_PROMPT = """Translate this question about Vietnamese law into Vietnamese, phrased like a Vietnamese legal FAQ:
+say who does what, using the wording of legal texts. Examples:
+- "What is the fine for driving a car without a license?" -> "Người điều khiển xe ô tô không có giấy phép lái xe bị phạt bao nhiêu tiền?"
+- "How long is maternity leave for female employees?" -> "Lao động nữ được nghỉ thai sản bao lâu?"
 Reply with the Vietnamese question only.
 
 Question: {q}"""
+
+TRANSLATE_A_PROMPT = """Translate this answer about Vietnamese law into English. Keep citation markers such as [1] and document
+numbers such as 168/2024/NĐ-CP unchanged. Write "Nghị định" as "Decree", "Điều 7, khoản 7, điểm c" as "Article 7(7)(c)",
+and amounts as "4,000,000 to 6,000,000 VND". Reply with the English translation only.
+
+{a}"""
 VI_CHARS = re.compile(r"[ăâđêôơưàáạảãằắặẳẵầấậẩẫèéẹẻẽềếệểễìíịỉĩòóọỏõồốộổỗờớợởỡùúụủũừứựửữỳýỵỷỹ]", re.I)
 
 
@@ -87,7 +87,7 @@ def to_vietnamese(client, model: str, question: str) -> str:
         return question
     r = client.chat.completions.create(
         model=model, temperature=0.0, max_tokens=200,
-        messages=[{"role": "user", "content": TRANSLATE_PROMPT.format(q=question)}],
+        messages=[{"role": "user", "content": TRANSLATE_Q_PROMPT.format(q=question)}],
         extra_body={"chat_template_kwargs": {"enable_thinking": False}})
     out = (r.choices[0].message.content or "").split("</think>")[-1].strip().strip('"')
     return out or question
@@ -330,15 +330,13 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
 def answer(client, model: str, question: str, context: str, t: pd.Timestamp, thinking: bool = False,
            max_tokens: int = 1024, lang: str = "vi", question_vi: str | None = None) -> str:
     if lang == "en":
-        context = context.split(f"\n\n{FACTS_HEADER}", 1)[0]
-        q = question if not question_vi or question_vi == question else f"{question}\n(Vietnamese: {expand_query(question_vi)})"
-        user = f"Question date: {_fmt_date(t)}\n\nLegal excerpts (Vietnamese):\n{context}\n\nQuestion: {q}"
-        resp = client.chat.completions.create(
-            model=model, temperature=0.1, top_p=0.8, max_tokens=max_tokens,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT_EN}, {"role": "user", "content": user}],
-            extra_body={"chat_template_kwargs": {"enable_thinking": thinking}, "top_k": 20})
-        text = (resp.choices[0].message.content or "").split("</think>")[-1].strip()
-        return NOTICE_EN_RE.sub("", text).strip()
+        vi = answer(client, model, question_vi or question, context, t, thinking=thinking, max_tokens=max_tokens)
+        vi = NOTICE_RE.sub("", vi).strip()
+        r = client.chat.completions.create(
+            model=model, temperature=0.0, max_tokens=max_tokens,
+            messages=[{"role": "user", "content": TRANSLATE_A_PROMPT.format(a=vi)}],
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}})
+        return NOTICE_EN_RE.sub("", (r.choices[0].message.content or "").split("</think>")[-1]).strip()
     user = (f"Thời điểm hỏi: {_fmt_date(t)}\n\nCác trích đoạn văn bản pháp luật:\n{context}\n\n"
             f"Câu hỏi: {expand_query(question)}")
     has_facts = FACTS_HEADER in context

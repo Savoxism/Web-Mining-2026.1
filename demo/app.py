@@ -104,7 +104,7 @@ lg = load()
 with st.form("ask"):
     question = st.text_area("Question", height=90, label_visibility="collapsed",
                             placeholder="e.g. How much is the fine for running a red light on a motorbike?")
-    c1, c2 = st.columns([1, 2])
+    c1, c2 = st.columns([1, 2], vertical_alignment="bottom")
     t_q = pd.Timestamp(c1.date_input("Law as of", value=date.today(), format="DD/MM/YYYY"))
     go = c2.form_submit_button("Ask", type="primary")
 
