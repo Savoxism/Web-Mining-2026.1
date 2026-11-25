@@ -98,7 +98,7 @@ LEXGRAPH_BI=outputs/models/bge-m3-legal/final LEXGRAPH_CE=outputs/models/reranke
 ssh -N -L 8501:localhost:8501 H200_ANNP36    # then open http://localhost:8501
 ```
 
-The demo (English interface) has one question box and one date: the answer follows the law in force on that date.
+The demo has an English interface; questions, answers and sources are in Vietnamese. It has one question box and one date: the answer follows the law in force on that date.
 Each source shows since when it is in force, and when the rule the question is about changed, a short verified note
 gives the change date, the old and new amounts and a clause-level diff. Change the date to see the earlier answer.
 

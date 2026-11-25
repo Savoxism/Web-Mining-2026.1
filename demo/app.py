@@ -1,4 +1,4 @@
-"""LexGraph-VN Streamlit demo (English interface).
+"""LexGraph-VN Streamlit demo: English interface, Vietnamese questions, answers and sources.
 
 One question box and one date: the answer follows the law in force on that date. When the rule the question is about
 changed, a short verified note shows what changed and since when.
@@ -22,7 +22,7 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
-from lexgraph.llm import answer, build_context, set_fact_checker, to_vietnamese  # noqa: E402
+from lexgraph.llm import NOTICE_RE, answer, build_context, set_fact_checker  # noqa: E402
 from lexgraph.pipeline import LexGraph, Weights  # noqa: E402
 from lexgraph.versions import VersionIndex, word_diff_html  # noqa: E402
 
@@ -36,10 +36,6 @@ LLM_MODEL = os.environ.get("LEXGRAPH_LLM_MODEL", "qwen3-4b")
 KG_DIR = Path(os.environ.get("LEXGRAPH_KG_DIR", "data/kg"))
 GAMMA, K_RERANK, N_SOURCES = 2.0, 30, 5  # tuned on validation
 
-DOC_TYPES = {"Bộ luật": "Code", "Luật": "Law", "Pháp lệnh": "Ordinance", "Nghị định": "Decree", "Nghị quyết": "Resolution",
-             "Nghị quyết liên tịch": "Joint Resolution", "Thông tư": "Circular", "Thông tư liên tịch": "Joint Circular",
-             "Quyết định": "Decision", "Lệnh": "Order", "Sắc lệnh": "Edict", "Hiến pháp": "Constitution"}
-MONEY = re.compile(r"(\d{1,3}(?:\.\d{3})+)")
 
 st.set_page_config(page_title="LexGraph-VN", page_icon="⚖️", layout="centered", initial_sidebar_state="collapsed")
 st.markdown("""
@@ -82,50 +78,38 @@ def doc_name(so_ky_hieu: str, loai: str | None = None) -> str:
     if not loai:
         m = lg.docs[lg.docs.so_ky_hieu == so_ky_hieu]
         loai = m.loai_van_ban.iloc[0] if len(m) else ""
-    return f"{DOC_TYPES.get(loai, '')} {so_ky_hieu}".strip()
+    return f"{loai or ''} {so_ky_hieu}".strip()
 
 
 def art_of(aid) -> str:
     return str(aid).split("#")[-1].split("~")[0] if isinstance(aid, str) and "#" in aid else "?"
 
 
-def vnd(amount: str) -> str:
-    """'800.000–1.000.000 đồng' -> '800,000 to 1,000,000 VND'."""
-    nums = [n.replace(".", ",") for n in MONEY.findall(amount or "")]
-    return " to ".join(nums) + " VND" if nums else ""
-
-
 # ------------------------------------------------------------------ page
 st.title("⚖️ LexGraph-VN")
-st.caption("Questions about Vietnamese law, answered under the law in force on the date you choose.")
+st.caption("Ask a question about Vietnamese law (in Vietnamese). The answer follows the law in force on the date you choose.")
 
 lg = load()
 
 with st.form("ask"):
     question = st.text_area("Question", height=90, label_visibility="collapsed",
-                            placeholder="e.g. How much is the fine for running a red light on a motorbike?")
+                            placeholder="e.g. Người điều khiển xe mô tô, xe gắn máy vượt đèn đỏ bị phạt bao nhiêu tiền?")
     c1, c2 = st.columns([1, 2], vertical_alignment="bottom")
     t_q = pd.Timestamp(c1.date_input("Law as of", value=date.today(), format="DD/MM/YYYY"))
     go = c2.form_submit_button("Ask", type="primary")
 
 if go and question.strip():
     client = llm()
-    q_vi = question
-    if client is not None:
-        with st.spinner("Reading the question…"):
-            try:
-                q_vi = to_vietnamese(client, LLM_MODEL, question)
-            except Exception:
-                client = None
     w = Weights(beta=0.0, gamma=GAMMA, mu=0.0, tau=0.80, use_ce=True, inject=True)
     with st.spinner("Searching the law in force…"):
-        res = lg.search(q_vi, t_q, w, k_rerank=K_RERANK, top=20)
+        res = lg.search(question, t_q, w, k_rerank=K_RERANK, top=20)
     facts, ans, sources = [], None, []
     if client is not None:
         with st.spinner("Writing the answer…"):
             try:
-                ctx, sources, facts = build_context(res, lg, t_q, True, n_sources=N_SOURCES, query=q_vi, return_facts=True)
-                ans = answer(client, LLM_MODEL, question, ctx, t_q, lang="en", question_vi=q_vi)
+                ctx, sources, facts = build_context(res, lg, t_q, True, n_sources=N_SOURCES, query=question, return_facts=True)
+                # the app shows the verified change itself, so the model's own notice section is dropped
+                ans = NOTICE_RE.sub("", answer(client, LLM_MODEL, question, ctx, t_q)).strip()
             except Exception:
                 ans, facts, sources = None, [], []
     st.session_state["last"] = dict(question=question, t=t_q, res=res, facts=facts, ans=ans, sources=sources)
@@ -141,18 +125,18 @@ if "last" in st.session_state:
         st.info("The answer model is offline, so only the retrieved articles are shown.")
     st.markdown(f"<div class='muted'>Under the law in force on {fmt_date(t_used)}.</div>", unsafe_allow_html=True)
 
-    # show a verified change only when the answer relies on the new article (it cites it)
+    # show a verified change only when the answer relies on the new article (cites it as [k] or by number)
     cited = {int(k) for k in re.findall(r"\[(\d+)\]", L["ans"] or "")}
     cited_arts = {(s["doc"], art_of(s["aid"])) for s in L["sources"] if s["k"] in cited and not s["stale"]}
-    facts = [f for f in L["facts"] if (f["new_doc"], f["new_art"]) in cited_arts]
+    facts = [f for f in L["facts"] if (f["new_doc"], f["new_art"]) in cited_arts or f["new_doc"] in (L["ans"] or "")]
     for f in facts[:1]:  # the change that matters for this question, verified clause by clause
-        old_amt, new_amt = vnd(f["old_amount"]), vnd(f["new_amount"])
+        old_amt, new_amt = f["old_amount"], f["new_amount"]
         amounts = (f"<br>Before: <s>{old_amt}</s> &nbsp;→&nbsp; now: <b>{new_amt}</b>" if old_amt and new_amt and old_amt != new_amt else "")
         st.markdown(
             f"<div class='change'><b>This rule changed on {f['since']}.</b> "
-            f"{html.escape(doc_name(f['new_doc']))}, Art. {f['new_art']} replaced "
-            f"{html.escape(doc_name(f['old_doc']))}, Art. {f['old_art']}.{amounts}</div>", unsafe_allow_html=True)
-        with st.expander("Compare the clause before and after (Vietnamese)"):
+            f"{html.escape(doc_name(f['new_doc']))}, Điều {f['new_art']} replaced "
+            f"{html.escape(doc_name(f['old_doc']))}, Điều {f['old_art']}.{amounts}</div>", unsafe_allow_html=True)
+        with st.expander("Compare the clause before and after"):
             st.markdown(word_diff_html(f["old_clause"], f["new_clause"]), unsafe_allow_html=True)
 
     st.subheader("Sources")
@@ -170,11 +154,11 @@ if "last" in st.session_state:
         r = members[0][1]
         ks = ", ".join(str(k) for k, _ in members)
         if isinstance(r.so_ky_hieu, str):
-            name = f"<b>{html.escape(doc_name(str(r.so_ky_hieu), r.loai_van_ban))}</b>, Art. {art}"
+            name = f"<b>{html.escape(doc_name(str(r.so_ky_hieu), r.loai_van_ban))}</b>, Điều {art}"
             status = "<span class='old'>older version, since replaced</span>" if stale else \
                 f"<span class='ok'>in force since {fmt_date(r.valid_from)}</span>"
         else:  # QA passage that could not be linked to a document on the portal
             name, status = "<b>Legal passage</b>", "<span class='old'>source document not identified</span>"
         st.markdown(f"<div class='src'>[{ks}] {name} · {status}</div>", unsafe_allow_html=True)
-        with st.expander("Original text (Vietnamese)", expanded=False):
+        with st.expander("Original text", expanded=False):
             st.text("\n…\n".join(str(m.text)[:3000] for _, m in members))
