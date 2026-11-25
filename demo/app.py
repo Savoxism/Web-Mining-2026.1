@@ -141,7 +141,11 @@ if "last" in st.session_state:
         st.info("The answer model is offline, so only the retrieved articles are shown.")
     st.markdown(f"<div class='muted'>Under the law in force on {fmt_date(t_used)}.</div>", unsafe_allow_html=True)
 
-    for f in L["facts"][:1]:  # the change that matters for this question, verified clause by clause
+    # show a verified change only when the answer relies on the new article (it cites it)
+    cited = {int(k) for k in re.findall(r"\[(\d+)\]", L["ans"] or "")}
+    cited_arts = {(s["doc"], art_of(s["aid"])) for s in L["sources"] if s["k"] in cited and not s["stale"]}
+    facts = [f for f in L["facts"] if (f["new_doc"], f["new_art"]) in cited_arts]
+    for f in facts[:1]:  # the change that matters for this question, verified clause by clause
         old_amt, new_amt = vnd(f["old_amount"]), vnd(f["new_amount"])
         amounts = (f"<br>Before: <s>{old_amt}</s> &nbsp;→&nbsp; now: <b>{new_amt}</b>" if old_amt and new_amt and old_amt != new_amt else "")
         st.markdown(
