@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,13 +14,13 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #15181e; --fg: #e8e6e1; --muted: #a2a9b4; --accent: #e07a6f; --accent2: #6fb0e0;
-    --card: #1e232b; --line: #343b46; --good: #6cc28f; --warn: #e3b25a; --bar: #6fb0e0; --bar2: #e07a6f;
+    --bg: #0b0d11; --fg: #ecebe7; --muted: #a2a9b4; --accent: #e07a6f; --accent2: #6fb0e0;
+    --card: #151920; --line: #2b323d; --good: #6cc28f; --warn: #e3b25a; --bar: #6fb0e0; --bar2: #e07a6f;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #15181e; --fg: #e8e6e1; --muted: #a2a9b4; --accent: #e07a6f; --accent2: #6fb0e0;
-  --card: #1e232b; --line: #343b46; --good: #6cc28f; --warn: #e3b25a; --bar: #6fb0e0; --bar2: #e07a6f;
+  --bg: #0b0d11; --fg: #ecebe7; --muted: #a2a9b4; --accent: #e07a6f; --accent2: #6fb0e0;
+  --card: #151920; --line: #2b323d; --good: #6cc28f; --warn: #e3b25a; --bar: #6fb0e0; --bar2: #e07a6f;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
@@ -309,8 +309,8 @@ tr.best td { font-weight: 700; color: var(--accent2); }
       🟦 01/01/2020 · original<br>
       🟨 01/01/2022 · Decree 123/2021 amends clauses 3, 4, 5, 10 of Art. 6<br>
       🟥 01/01/2025 · replaced by Decree 168/2024, Art. 7 (match 0.95)<br>
-      <span style="background:#fde2e1;color:#9b2c2c;text-decoration:line-through">800,000 to 1,000,000 VND</span>
-      <span style="background:#dcf3e3;color:#1e6b3a">4,000,000 to 6,000,000 VND</span>
+      <span style="background:color-mix(in srgb, var(--accent) 22%, transparent);color:var(--accent);text-decoration:line-through">800,000 to 1,000,000 VND</span>
+      <span style="background:color-mix(in srgb, var(--good) 22%, transparent);color:var(--good)">4,000,000 to 6,000,000 VND</span>
     </div>
   </div>
 </section>
