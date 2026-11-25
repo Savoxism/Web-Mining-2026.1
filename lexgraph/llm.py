@@ -50,6 +50,7 @@ def llm_says_changed(client, model: str, question: str, old: str, new: str, thin
         extra_body={"chat_template_kwargs": {"enable_thinking": thinking}})
     out = (r.choices[0].message.content or "").split("</think>")[-1].strip().upper()
     return out.startswith("CÓ") or out.startswith("CO")
+NOTICE_EN_RE = re.compile(r"\n*\s*(?:\*\*)?⚠️?\s*(?:\*\*)?\s*(?:Law|Legal) change.*", re.S | re.I)
 NOTICE_RE = re.compile(r"\n*\s*(?:\*\*)?⚠️?\s*(?:\*\*)?\s*Thay đổi pháp luật.*", re.S)
 
 SYSTEM_PROMPT = """Bạn là trợ lý hỏi đáp pháp luật Việt Nam.
@@ -60,6 +61,36 @@ Quy tắc:
    "THAY ĐỔI ĐÃ XÁC MINH", và chỉ nêu đúng các thông tin trong mục đó (quy định cũ, quy định mới, thời điểm thay đổi).
 4. Nếu các trích đoạn không đủ căn cứ để trả lời, nói rõ "Không tìm thấy đủ căn cứ pháp lý" và không suy đoán.
 5. Trả lời ngắn gọn, rõ ràng, bằng tiếng Việt."""
+
+# English answers for the demo. The change notice is not written by the model: the app shows the verified
+# change facts itself, so the model only answers under the law in force.
+SYSTEM_PROMPT_EN = """You answer questions about Vietnamese law.
+Rules:
+1. Use only the Vietnamese legal excerpts provided. Do not use outside knowledge.
+2. Cite every key point as [k], matching the excerpt number, with the document number and article.
+3. Answer under the excerpts that are IN FORCE at the question date. Do not write about older rules or legal changes.
+4. If the excerpts are not enough, say "No sufficient legal basis was found." and do not guess.
+5. Answer briefly and clearly in English. Write amounts as in "4,000,000 to 6,000,000 VND". Keep document numbers
+   as written (e.g. 168/2024/NĐ-CP)."""
+
+TRANSLATE_PROMPT = """Translate this question about Vietnamese law into Vietnamese, using the wording of Vietnamese legal
+texts (e.g. "motorbike" -> "xe mô tô, xe gắn máy", "run a red light" -> "vượt đèn đỏ", "annual leave" -> "nghỉ hằng năm").
+Reply with the Vietnamese question only.
+
+Question: {q}"""
+VI_CHARS = re.compile(r"[ăâđêôơưàáạảãằắặẳẵầấậẩẫèéẹẻẽềếệểễìíịỉĩòóọỏõồốộổỗờớợởỡùúụủũừứựửữỳýỵỷỹ]", re.I)
+
+
+def to_vietnamese(client, model: str, question: str) -> str:
+    """Questions without Vietnamese letters are translated for retrieval (the retriever is trained on Vietnamese)."""
+    if VI_CHARS.search(question):
+        return question
+    r = client.chat.completions.create(
+        model=model, temperature=0.0, max_tokens=200,
+        messages=[{"role": "user", "content": TRANSLATE_PROMPT.format(q=question)}],
+        extra_body={"chat_template_kwargs": {"enable_thinking": False}})
+    out = (r.choices[0].message.content or "").split("</think>")[-1].strip().strip('"')
+    return out or question
 
 
 def _s(x) -> str:
@@ -188,8 +219,10 @@ def _fact_line(f: dict) -> str:
 
 
 def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, n_sources: int = 5,
-                  max_chars: int = 1800, query: str | None = None) -> tuple[str, list[dict]]:
-    """Pick sources and format them. Time-aware mode prefers valid articles and adds successor articles."""
+                  max_chars: int = 1800, query: str | None = None, return_facts: bool = False):
+    """Pick sources and format them. Time-aware mode prefers valid articles and adds successor articles.
+
+    Returns (context, sources), or (context, sources, verified change facts) with return_facts=True."""
     rows = results.to_dict("records")
     from lexgraph.query import expand_query
     q_exp = expand_query(query) if query else None
@@ -291,11 +324,21 @@ def build_context(results: pd.DataFrame, lg, t: pd.Timestamp, time_aware: bool, 
     ctx = "\n\n".join(blocks)
     if time_aware and facts:
         ctx += f"\n\n{FACTS_HEADER} (dựa trên khoản liên quan tới câu hỏi):\n" + "\n".join(_fact_line(f) for f in facts)
-    return ctx, sources
+    return (ctx, sources, facts) if return_facts else (ctx, sources)
 
 
 def answer(client, model: str, question: str, context: str, t: pd.Timestamp, thinking: bool = False,
-           max_tokens: int = 1024) -> str:
+           max_tokens: int = 1024, lang: str = "vi", question_vi: str | None = None) -> str:
+    if lang == "en":
+        context = context.split(f"\n\n{FACTS_HEADER}", 1)[0]
+        q = question if not question_vi or question_vi == question else f"{question}\n(Vietnamese: {expand_query(question_vi)})"
+        user = f"Question date: {_fmt_date(t)}\n\nLegal excerpts (Vietnamese):\n{context}\n\nQuestion: {q}"
+        resp = client.chat.completions.create(
+            model=model, temperature=0.1, top_p=0.8, max_tokens=max_tokens,
+            messages=[{"role": "system", "content": SYSTEM_PROMPT_EN}, {"role": "user", "content": user}],
+            extra_body={"chat_template_kwargs": {"enable_thinking": thinking}, "top_k": 20})
+        text = (resp.choices[0].message.content or "").split("</think>")[-1].strip()
+        return NOTICE_EN_RE.sub("", text).strip()
     user = (f"Thời điểm hỏi: {_fmt_date(t)}\n\nCác trích đoạn văn bản pháp luật:\n{context}\n\n"
             f"Câu hỏi: {expand_query(question)}")
     has_facts = FACTS_HEADER in context

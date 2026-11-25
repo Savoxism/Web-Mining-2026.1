@@ -1,27 +1,30 @@
-"""LexGraph-VN Streamlit demo.
+"""LexGraph-VN Streamlit demo (English interface).
+
+One question box and one date: the answer follows the law in force on that date. When the rule the question is about
+changed, a short verified note shows what changed and since when.
 
 Run on the GPU server (models stay in GPU memory), then tunnel the port:
-    LEXGRAPH_BI=BAAI/bge-m3 LEXGRAPH_CE=BAAI/bge-reranker-v2-m3 \
+    LEXGRAPH_BI=outputs/models/bge-m3-legal/final LEXGRAPH_CE=outputs/models/reranker-legal/final \
     .venv/bin/streamlit run demo/app.py --server.port 8501 --server.address 127.0.0.1
     ssh -L 8501:localhost:8501 H200_ANNP36     # then open http://localhost:8501
 """
 
-import json
+import html
 import os
+import re
 import sys
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
-from lexgraph.llm import answer, build_context, set_fact_checker  # noqa: E402
+from lexgraph.llm import answer, build_context, set_fact_checker, to_vietnamese  # noqa: E402
 from lexgraph.pipeline import LexGraph, Weights  # noqa: E402
-from lexgraph.versions import VersionIndex, money_change, word_diff_html  # noqa: E402
+from lexgraph.versions import VersionIndex, word_diff_html  # noqa: E402
 
 BI = os.environ.get("LEXGRAPH_BI", "BAAI/bge-m3")
 BI_REV = os.environ.get("LEXGRAPH_BI_REV") or None
@@ -31,16 +34,26 @@ LLM_URL = os.environ.get("LEXGRAPH_LLM_URL", "http://127.0.0.1:8100/v1")
 LLM_MODEL = os.environ.get("LEXGRAPH_LLM_MODEL", "qwen3-4b")
 # data/kg is the snapshot; data/kg_live adds the documents crawled from vbpl.vn (scripts/kg/update_kg.py)
 KG_DIR = Path(os.environ.get("LEXGRAPH_KG_DIR", "data/kg"))
+GAMMA, K_RERANK, N_SOURCES = 2.0, 30, 5  # tuned on validation
 
-EXAMPLES = {
-    "Câu hỏi thông thường": "Người lao động làm việc trong điều kiện bình thường được nghỉ hằng năm bao nhiêu ngày?",
-    "Câu hỏi về luật đã thay đổi": "Người điều khiển xe mô tô, xe gắn máy vượt đèn đỏ bị phạt bao nhiêu tiền?",
-}
+DOC_TYPES = {"Bộ luật": "Code", "Luật": "Law", "Pháp lệnh": "Ordinance", "Nghị định": "Decree", "Nghị quyết": "Resolution",
+             "Nghị quyết liên tịch": "Joint Resolution", "Thông tư": "Circular", "Thông tư liên tịch": "Joint Circular",
+             "Quyết định": "Decision", "Lệnh": "Order", "Sắc lệnh": "Edict", "Hiến pháp": "Constitution"}
+MONEY = re.compile(r"(\d{1,3}(?:\.\d{3})+)")
 
-st.set_page_config(page_title="LexGraph-VN", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="LexGraph-VN", page_icon="⚖️", layout="centered", initial_sidebar_state="collapsed")
+st.markdown("""
+<style>
+[data-testid="stSidebar"], [data-testid="collapsedControl"] { display: none; }
+.change { border-left: 4px solid #b7791f; padding: .6rem .9rem; margin: .8rem 0 .4rem; background: rgba(183,121,31,.07);
+  border-radius: 4px; }
+.src { font-size: .92rem; margin: .15rem 0; }
+.ok { color: #2f7d4f; } .old { color: #8a8f98; }
+.muted { color: #8a8f98; font-size: .85rem; }
+</style>""", unsafe_allow_html=True)
 
 
-@st.cache_resource(show_spinner="Đang nạp mô hình và knowledge graph…")
+@st.cache_resource(show_spinner="Loading models and the legal knowledge graph…")
 def load():
     lg = LexGraph(BI, CE, bi_revision=BI_REV, ce_revision=CE_REV, kg_dir=str(KG_DIR),
                   temporal_dir=str(KG_DIR / "temporal"))
@@ -48,241 +61,111 @@ def load():
     return lg
 
 
-@st.cache_resource
-def llm_client():
+def llm():
+    """OpenAI-compatible client for Qwen3-4B on vLLM, or None when the server is down."""
     from openai import OpenAI
-    client = OpenAI(base_url=LLM_URL, api_key="EMPTY")
-    set_fact_checker(client, LLM_MODEL, thinking=False)  # Qwen3-4B confirms each "law changed" fact
+    client = OpenAI(base_url=LLM_URL, api_key="EMPTY", timeout=120, max_retries=0)
+    try:
+        client.models.list()
+    except Exception:
+        set_fact_checker(None, None)
+        return None
+    set_fact_checker(client, LLM_MODEL, thinking=False)  # Qwen3-4B confirms each change fact
     return client
 
 
-def badge(stale: bool) -> str:
-    return "🔴 hết hiệu lực / bị thay thế" if stale else "🟢 còn hiệu lực"
-
-
 def fmt_date(x) -> str:
-    return pd.Timestamp(x).strftime("%d/%m/%Y") if pd.notna(x) else "—"
+    return pd.Timestamp(x).strftime("%d/%m/%Y") if pd.notna(x) else "?"
 
 
-def graph_html(lg: LexGraph, doc_ids: list[str], t: pd.Timestamp) -> str:
-    from pyvis.network import Network
-    from lexgraph.temporal import in_force
-
-    edges = st.session_state.get("_edges")
-    if edges is None:
-        edges = pd.read_parquet(KG_DIR / "edges.parquet")
-        edges = edges[edges.type.isin({"amends", "replaces", "repeals", "partially_repeals", "guides"})]
-        st.session_state["_edges"] = edges
-    focus = set(d for d in doc_ids if d)
-    e = edges[edges.src.isin(focus) | edges.dst.isin(focus)]
-    e = e[e.type.isin({"amends", "replaces", "repeals", "partially_repeals"}) | (e.src.isin(focus) & e.dst.isin(focus))]
-    e = e.head(120)
-    nodes = focus | set(e.src) | set(e.dst)
-    net = Network(height="520px", width="100%", directed=True, bgcolor="#ffffff", font_color="#1d2330")
-    docs = lg.docs
-    for n in nodes:
-        if n not in docs.index:
-            continue
-        d = docs.loc[n]
-        ok = in_force([d.valid_from], [d.valid_to], t)[0]
-        color = "#2f7d4f" if ok else "#b7791f"
-        label = str(d.so_ky_hieu)
-        title = f"{d.so_ky_hieu}\n{str(d.title)[:120]}\nHiệu lực: {fmt_date(d.valid_from)} → {fmt_date(d.valid_to)}"
-        net.add_node(n, label=label, title=title, color=color, size=26 if n in focus else 14,
-                     borderWidth=3 if n in focus else 1)
-    style = {"amends": ("#1f5f8b", "sửa đổi"), "replaces": ("#9b2c2c", "thay thế"), "repeals": ("#9b2c2c", "bãi bỏ"),
-             "partially_repeals": ("#c05621", "bãi bỏ 1 phần"), "guides": ("#718096", "hướng dẫn")}
-    for r in e.itertuples(index=False):
-        if r.src in docs.index and r.dst in docs.index:
-            c, lab = style.get(r.type, ("#999", r.type))
-            net.add_edge(r.src, r.dst, color=c, title=lab, label=lab, font={"size": 9})
-    net.set_options('{"physics": {"barnesHut": {"springLength": 140}}, "edges": {"arrows": {"to": {"enabled": true}}}}')
-    return net.generate_html(notebook=False)
+def doc_name(so_ky_hieu: str, loai: str | None = None) -> str:
+    if not loai:
+        m = lg.docs[lg.docs.so_ky_hieu == so_ky_hieu]
+        loai = m.loai_van_ban.iloc[0] if len(m) else ""
+    return f"{DOC_TYPES.get(loai, '')} {so_ky_hieu}".strip()
 
 
-# ------------------------------------------------------------------ sidebar
-st.sidebar.title("⚖️ LexGraph-VN")
-st.sidebar.caption("Trợ lý hỏi đáp pháp luật Việt Nam có theo dõi hiệu lực theo thời gian")
-t_q = pd.Timestamp(st.sidebar.date_input("Thời điểm hỏi", value=date.today(), format="DD/MM/YYYY"))
-time_aware = st.sidebar.toggle("Xét hiệu lực theo thời gian", value=True)
-use_ce = st.sidebar.toggle("Cross-encoder re-ranking", value=True)
-use_llm = st.sidebar.toggle("Sinh câu trả lời bằng Qwen3-4B", value=True)
-thinking = st.sidebar.toggle("Qwen3 thinking mode", value=False)
-with st.sidebar.expander("Trọng số re-ranking"):
-    gamma = st.slider("γ (phạt văn bản hết hiệu lực)", 0.0, 10.0, 2.0, 0.5)
-    tau = 0.80  # version alignment v2 decides successors itself (classifier + one-to-one matching)
-    k_rerank = st.slider("Số ứng viên re-rank", 10, 100, 30, 5)
-    n_sources = st.slider("Số trích đoạn đưa vào LLM", 2, 10, 5, 1)
-st.sidebar.caption(f"Bi-encoder: `{BI}`  \nCross-encoder: `{CE}`  \nLLM: `{LLM_MODEL}` @ {LLM_URL}")
+def art_of(aid) -> str:
+    return str(aid).split("#")[-1].split("~")[0] if isinstance(aid, str) and "#" in aid else "?"
+
+
+def vnd(amount: str) -> str:
+    """'800.000–1.000.000 đồng' -> '800,000 to 1,000,000 VND'."""
+    nums = [n.replace(".", ",") for n in MONEY.findall(amount or "")]
+    return " to ".join(nums) + " VND" if nums else ""
+
+
+# ------------------------------------------------------------------ page
+st.title("⚖️ LexGraph-VN")
+st.caption("Questions about Vietnamese law, answered under the law in force on the date you choose.")
 
 lg = load()
-llm_client()
 
-tab_qa, tab_tt, tab_kg = st.tabs(["Hỏi đáp", "⏳ Time-travel", "Knowledge graph"])
+with st.form("ask"):
+    question = st.text_area("Question", height=90, label_visibility="collapsed",
+                            placeholder="e.g. How much is the fine for running a red light on a motorbike?")
+    c1, c2 = st.columns([1, 2])
+    t_q = pd.Timestamp(c1.date_input("Law as of", value=date.today(), format="DD/MM/YYYY"))
+    go = c2.form_submit_button("Ask", type="primary")
 
+if go and question.strip():
+    client = llm()
+    q_vi = question
+    if client is not None:
+        with st.spinner("Reading the question…"):
+            try:
+                q_vi = to_vietnamese(client, LLM_MODEL, question)
+            except Exception:
+                client = None
+    w = Weights(beta=0.0, gamma=GAMMA, mu=0.0, tau=0.80, use_ce=True, inject=True)
+    with st.spinner("Searching the law in force…"):
+        res = lg.search(q_vi, t_q, w, k_rerank=K_RERANK, top=20)
+    facts, ans, sources = [], None, []
+    if client is not None:
+        with st.spinner("Writing the answer…"):
+            try:
+                ctx, sources, facts = build_context(res, lg, t_q, True, n_sources=N_SOURCES, query=q_vi, return_facts=True)
+                ans = answer(client, LLM_MODEL, question, ctx, t_q, lang="en", question_vi=q_vi)
+            except Exception:
+                ans, facts, sources = None, [], []
+    st.session_state["last"] = dict(question=question, t=t_q, res=res, facts=facts, ans=ans, sources=sources)
 
-def show_history(lg, aid: str, t):
-    """Version timeline of an article with clause-level diffs."""
-    events = lg.versions.timeline(aid, lg, t)
-    if len(events) <= 1:
-        st.caption("Không có sửa đổi hay thay thế nào được ghi nhận cho điều luật này.")
-        return
-    for e in events:
-        date = fmt_date(e["date"])
-        if e["kind"] == "ban hành / có hiệu lực":
-            st.markdown(f"🟦 **{date}** · {e['doc']} · bản gốc")
-        elif e["kind"] == "thay thế bởi điều luật mới":
-            st.markdown(f"🟥 **{date}** · thay thế bởi **{e['doc']}** (Điều {e['aid'].split('#')[-1]}, độ khớp {e['sim']:.2f}"
-                        f"{', dẫn chiếu tường minh' if e['explicit'] else ''})")
-            old_rows, new_rows = lg.rows_of_aid.get(aid, []), lg.rows_of_aid.get(e["aid"], [])
-            if old_rows and new_rows:
-                old_t = str(lg.corpus.text.iat[old_rows[0]])[:2500]
-                new_t = "\n".join(str(lg.corpus.text.iat[x]) for x in new_rows[:2])[:2500]
-                note = money_change(old_t, new_t)
-                if note:
-                    st.caption(f"Mức tiền thay đổi: {note}")
-                with st.expander("Diff toàn điều (đỏ: bỏ, xanh: thêm)"):
-                    st.markdown(word_diff_html(old_t, new_t), unsafe_allow_html=True)
+if "last" in st.session_state:
+    L = st.session_state["last"]
+    res, t_used = L["res"], L["t"]
+
+    st.subheader("Answer")
+    if L["ans"]:
+        st.markdown(L["ans"])
+    else:
+        st.info("The answer model is offline, so only the retrieved articles are shown.")
+    st.markdown(f"<div class='muted'>Under the law in force on {fmt_date(t_used)}.</div>", unsafe_allow_html=True)
+
+    for f in L["facts"][:1]:  # the change that matters for this question, verified clause by clause
+        old_amt, new_amt = vnd(f["old_amount"]), vnd(f["new_amount"])
+        amounts = (f"<br>Before: <s>{old_amt}</s> &nbsp;→&nbsp; now: <b>{new_amt}</b>" if old_amt and new_amt and old_amt != new_amt else "")
+        st.markdown(
+            f"<div class='change'><b>This rule changed on {f['since']}.</b> "
+            f"{html.escape(doc_name(f['new_doc']))}, Art. {f['new_art']} replaced "
+            f"{html.escape(doc_name(f['old_doc']))}, Art. {f['old_art']}.{amounts}</div>", unsafe_allow_html=True)
+        with st.expander("Compare the clause before and after (Vietnamese)"):
+            st.markdown(word_diff_html(f["old_clause"], f["new_clause"]), unsafe_allow_html=True)
+
+    st.subheader("Sources")
+    if L["sources"]:
+        rows = [lg.corpus.iloc[s["row"]] if s["row"] is not None else None for s in L["sources"]]
+        items = [(s["k"], r, s["stale"]) for s, r in zip(L["sources"], rows) if r is not None]
+    else:
+        top = res[~res.stale].assign(_a=res.aid.astype(str).str.split("~").str[0]).drop_duplicates("_a").head(N_SOURCES)
+        items = [(k, lg.corpus.iloc[int(r.row)], False) for k, r in enumerate(top.itertuples(), start=1)]
+    for k, r, stale in items:
+        name = doc_name(str(r.so_ky_hieu), r.loai_van_ban) if isinstance(r.so_ky_hieu, str) else "Unlinked passage"
+        if stale:
+            status = f"<span class='old'>older version, no longer in force since {fmt_date(r.valid_to)}</span>" \
+                if pd.notna(r.valid_to) else "<span class='old'>older version</span>"
         else:
-            where = " ".join(x for x in [f"khoản {e['clause']}" if e.get("clause") else "",
-                                         f"điểm {e['points']}" if e.get("points") else ""] if x)
-            st.markdown(f"🟨 **{date}** · **{e['doc']}** · {e['kind']} {where}")
-            if e.get("old") or e.get("new"):
-                note = money_change(e.get("old"), e.get("new"))
-                if note:
-                    st.caption(f"Mức tiền thay đổi: {note}")
-                st.markdown(word_diff_html(e.get("old"), e.get("new")), unsafe_allow_html=True)
-
-# ------------------------------------------------------------------ QA tab
-with tab_qa:
-    st.title("Hỏi đáp pháp luật theo thời gian")
-    c1, c2, _ = st.columns([1.3, 1.5, 1])
-    for col, (label, q) in zip([c1, c2], EXAMPLES.items()):
-        if col.button(label, use_container_width=True):
-            st.session_state["question"] = q
-    question = st.text_area("Câu hỏi", key="question", height=90,
-                            placeholder="Ví dụ: Người lao động được nghỉ hằng năm bao nhiêu ngày?")
-    go = st.button("Hỏi", type="primary")
-
-    if go and question.strip():
-        w = Weights(beta=0.0, gamma=gamma if time_aware else 0.0, mu=0.0, tau=tau, use_ce=use_ce, inject=time_aware, static=not time_aware)
-        with st.spinner("Đang truy hồi và xếp hạng…"):
-            res = lg.search(question, t_q, w, k_rerank=k_rerank, top=20)
-        st.session_state["last"] = (question, res, t_q, time_aware)
-
-    if "last" in st.session_state:
-        question, res, t_used, ta = st.session_state["last"]
-
-        if use_llm:
-            ctx, sources = build_context(res, lg, t_used, ta, n_sources=n_sources, query=question)
-            with st.spinner("Qwen3-4B đang soạn câu trả lời…"):
-                try:
-                    ans = answer(llm_client(), LLM_MODEL, question, ctx, t_used, thinking=thinking)
-                except Exception as ex:  # LLM server down: show retrieval only
-                    ans = f"_Không gọi được LLM ({type(ex).__name__}). Kết quả truy hồi vẫn hiển thị bên dưới._"
-            st.subheader("Câu trả lời")
-            st.markdown(ans)
-            with st.expander("Ngữ cảnh đưa vào LLM"):
-                st.text(ctx)
-
-        # change notices: stale results with a successor article
-        if ta:
-            changed = res[res.stale & res.successor_aid.notna()].drop_duplicates(["aid", "successor_aid"]).head(3)
-            for r in changed.itertuples():
-                new_rows = lg.rows_of_aid.get(r.successor_aid, [])
-                if not new_rows:
-                    continue
-                new = lg.corpus.iloc[new_rows[0]]
-                st.warning(f"⚠️ Luật đã thay đổi: {r.so_ky_hieu} (Điều {str(r.aid).split('#')[-1]}) đã bị thay thế bởi "
-                           f"{new.so_ky_hieu} (Điều {str(new.aid).split('#')[-1].split('~')[0]}), hiệu lực từ "
-                           f"{fmt_date(new.valid_from)}. Độ khớp phiên bản {r.successor_sim:.2f}"
-                           f"{', có dẫn chiếu tường minh' if r.successor_explicit else ''}.")
-                a, b = st.columns(2)
-                a.markdown(f"**Trước — {r.so_ky_hieu}**")
-                a.text(str(r.text)[:2500])
-                b.markdown(f"**Sau — {new.so_ky_hieu}**")
-                b.text(str(new.text)[:2500])
-
-        st.subheader("Các điều luật được truy hồi")
-        for i, r in enumerate(res.itertuples(), start=1):
-            art = str(r.aid).split("#")[-1].split("~")[0] if isinstance(r.aid, str) else "?"
-            head = (f"{i}. {r.so_ky_hieu if isinstance(r.so_ky_hieu, str) else '(chưa liên kết văn bản)'} — Điều {art} · "
-                    f"{badge(bool(r.stale)) if ta else ''} · điểm {r.final:.2f}")
-            with st.expander(head, expanded=i <= 2):
-                st.caption(f"{str(r.title)[:200] if isinstance(r.title, str) else ''}  \n"
-                           f"Hiệu lực: {fmt_date(r.valid_from)} → {fmt_date(r.valid_to)} · nguồn: "
-                           + ("🆕 văn bản mới (crawl vbpl.vn)" if r.source == "crawl" else str(r.source))
-                           + (f"  \nLý do: {r.stale_reason}" if r.stale and ta else ""))
-                st.text(str(r.text)[:3000])
-                st.caption(f"bi-encoder {r.bi_score:.3f} · cross-encoder {r.ce_score:.2f}")
-
-        st.subheader("Lịch sử phiên bản")
-        shown = []
-        for r in res.itertuples():
-            a = str(r.aid) if isinstance(r.aid, str) else ""
-            a = a.split("~")[0]
-            if a and a not in shown and (r.stale or len(lg.versions.amendments(a)) > 0):
-                shown.append(a)
-            if len(shown) >= 2:
-                break
-        if not shown:
-            st.caption("Các điều luật được truy hồi chưa từng bị sửa đổi hay thay thế.")
-        for a in shown:
-            d = lg.docs.so_ky_hieu.get(a.split("#")[0], "")
-            with st.expander(f"{d} · Điều {a.split('#')[-1]}", expanded=True):
-                show_history(lg, a, t_used)
-
-        st.subheader("Đồ thị quan hệ giữa các văn bản")
-        st.caption("Xanh: còn hiệu lực tại thời điểm hỏi · Vàng: hết hiệu lực. Mũi tên đi từ văn bản mới tới văn bản bị tác động.")
-        components.html(graph_html(lg, res.doc_id.dropna().unique().tolist()[:8], t_used), height=540)
-
-# ------------------------------------------------------------------ time-travel tab
-with tab_tt:
-    st.title("⏳ Cùng một câu hỏi, ở những thời điểm khác nhau")
-    tt_q = st.text_input("Câu hỏi", value=EXAMPLES["Câu hỏi về luật đã thay đổi"], key="tt_q")
-    c = st.columns(3)
-    dates = [c[0].date_input("Mốc 1", value=date(2021, 6, 1), format="DD/MM/YYYY", key="d1"),
-             c[1].date_input("Mốc 2", value=date(2023, 6, 1), format="DD/MM/YYYY", key="d2"),
-             c[2].date_input("Mốc 3", value=date.today(), format="DD/MM/YYYY", key="d3")]
-    tt_llm = st.toggle("Sinh câu trả lời ở mỗi mốc (Qwen3-4B)", value=True, key="tt_llm")
-    if st.button("So sánh theo thời gian", type="primary"):
-        w = Weights(beta=0.0, gamma=gamma, mu=0.0, tau=tau, use_ce=True, inject=True)
-        cols = st.columns(3)
-        for col, dte in zip(cols, dates):
-            tq = pd.Timestamp(dte)
-            with col:
-                st.markdown(f"#### {fmt_date(tq)}")
-                with st.spinner("Đang truy hồi…"):
-                    r = lg.search(tt_q, tq, w, k_rerank=k_rerank, top=20)
-                valid = r[~r.stale & r.so_ky_hieu.notna()]
-                valid = valid.assign(_a=valid.aid.astype(str).str.split("~").str[0]).drop_duplicates("_a").head(3)
-                for x in valid.itertuples():
-                    art = str(x.aid).split("#")[-1].split("~")[0] if isinstance(x.aid, str) else "?"
-                    st.markdown(f"🟢 **{x.so_ky_hieu}**, Điều {art}  \n<span style='color:gray;font-size:0.85em'>"
-                                f"hiệu lực {fmt_date(x.valid_from)} → {fmt_date(x.valid_to)}</span>", unsafe_allow_html=True)
-                if tt_llm:
-                    ctx, _ = build_context(r, lg, tq, True, n_sources=n_sources, query=tt_q)
-                    try:
-                        st.info(answer(llm_client(), LLM_MODEL, tt_q, ctx, tq, max_tokens=400))
-                    except Exception as ex:
-                        st.caption(f"Không gọi được LLM ({type(ex).__name__}).")
-
-# ------------------------------------------------------------------ KG tab
-with tab_kg:
-    st.title("Knowledge graph pháp luật")
-    stats = json.loads(Path("data/kg/kg_stats.json").read_text())
-    a, b, c, d = st.columns(4)
-    a.metric("Văn bản", f"{stats['docs_selected']:,}")
-    b.metric("Quan hệ", f"{stats['edges']:,}")
-    c.metric("Điều luật", f"{stats['articles']:,}")
-    d.metric("Đoạn QA liên kết", f"{stats['passage_link_rate']:.1%}")
-    st.markdown("**Loại quan hệ**")
-    st.bar_chart(pd.Series(stats["edge_types"]).sort_values(ascending=False))
-    st.markdown("**Văn bản có PageRank cao nhất**")
-    st.dataframe(pd.DataFrame(stats["top_pagerank"]), use_container_width=True, hide_index=True)
-    st.markdown("**Trích xuất dẫn chiếu, so với quan hệ của cổng vbpl.vn**")
-    st.json(stats["xref_eval"])
-    upd = KG_DIR / "update_stats.json"
-    if upd.exists():
-        st.markdown("**Cập nhật tăng dần từ vbpl.vn** (văn bản mới crawl theo sitemap)")
-        st.json(json.loads(upd.read_text()))
+            status = f"<span class='ok'>in force since {fmt_date(r.valid_from)}</span>"
+        st.markdown(f"<div class='src'>[{k}] <b>{html.escape(name)}</b>, Art. {art_of(r.aid)} · {status}</div>",
+                    unsafe_allow_html=True)
+        with st.expander("Original text (Vietnamese)", expanded=False):
+            st.text(str(r.text)[:3000])
