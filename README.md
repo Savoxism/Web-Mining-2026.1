@@ -65,7 +65,7 @@ Precision 0.88 on judged test pairs; 7,465 article pairs matched, 9,362 of 31,57
 * Legal QA pairs: `Savoxism/soict-hackathon-2025-legal-corpus` (Hugging Face) -> `data/soict-hackathon-2025-legal-corpus/`.
   132,424 question–article pairs, 68,663 passages; split v2 95,231 / 11,891 / 11,885.
 * Legal documents: `th1nhng0/vietnamese-legal-documents` (CC BY 4.0 crawl of vbpl.vn, 171,556 documents) -> `data/vbpl/`.
-  Knowledge graph: 148,282 documents, 981,412 articles, 894,330 typed edges (9 types), 38,344 clause-level amendments.
+  Knowledge graph: 148,282 documents, 981,412 articles, 894,057 typed edges (6 types: based on, cites, guides, amends, replaces, repeals; partial repeals flagged), 38,344 clause-level amendments.
 * New documents since that crawl: our own crawler on the vbpl.vn sitemap -> `data/crawl/`. The portal's relation lists
   come from its API, which robots.txt disallows, so relations of new documents are extracted from their text.
 
@@ -98,8 +98,9 @@ LEXGRAPH_BI=outputs/models/bge-m3-legal/final LEXGRAPH_CE=outputs/models/reranke
 ssh -N -L 8501:localhost:8501 H200_ANNP36    # then open http://localhost:8501
 ```
 
-The demo answers the same question at different dates (time-travel), shows the validity of every retrieved article,
-the version history of changed articles (clause-level diffs) and the amendment graph.
+The demo (English interface) has one question box and one date: the answer follows the law in force on that date.
+Each source shows since when it is in force, and when the rule the question is about changed, a short verified note
+gives the change date, the old and new amounts and a clause-level diff. Change the date to see the earlier answer.
 
 ## Results (test split v2, 11,885 questions)
 

@@ -54,7 +54,7 @@ Code: \url{https://github.com/Savoxism/Web-Mining-2026.1}}
 Legal question answering is usually evaluated as if the law were static: a retrieved article counts as correct even
 after it has been amended, replaced or repealed. We study \emph{temporal} legal question answering: answering under the
 law in force when the question is asked, and saying when the rule changed. We mine the national legal portal into a
-typed knowledge graph of 148,282 documents and 894,330 relations, whose amends, replaces and repeals links give every
+typed knowledge graph of 148,282 documents and 894,057 relations of six types, whose amends, replaces and repeals links give every
 document a validity interval and connect old articles to their successors; clause-level amendments become ``diffs'' of
 the law, and a polite crawler keeps the graph up to date. Online, a fine-tuned BGE-M3 retriever and BGE-Reranker (test
 MRR@10 from \textbf{\ResZsCeMrr} to \textbf{\ResFtCeMrr}) are combined with validity signals, and a self-hosted Qwen3-4B
@@ -123,7 +123,7 @@ We treat temporal legal QA as a \textbf{web mining} problem: the information tha
 applies is spread over the \emph{content} of documents (``Sửa đổi điểm a khoản 3 Điều 6 như sau: \dots'') and the
 \emph{link structure} between them (amends, replaces, repeals). LexGraph-VN mines both. Our contributions are:
 \begin{itemize}
-\item \textbf{A temporal legal knowledge graph, kept up to date.} We mine vbpl.vn into 9 typed relations, a validity
+\item \textbf{A temporal legal knowledge graph, kept up to date.} We mine vbpl.vn into six relation types, a validity
 interval for every document, \AmOps{} clause-level amendment operations and a learned \emph{version alignment} from old
 articles to the articles that supersede them; a polite incremental crawler adds new documents and relations from the
 portal (Section~\ref{sec:system}).
@@ -162,7 +162,7 @@ statutes, where it is encoded in amending documents and in the portal's link str
 \node[lane] at (-0.25, 0.82) {Offline: web mining (Sections~\ref{sec:data}--\ref{sec:temporal})};
 \node[box] (crawl) at (1.05, 0)  {vbpl.vn snapshot + sitemap crawler};
 \node[box] (ie)    at (3.55, 0)  {Articles, relations, amendments};
-\node[box] (kg)    at (6.05, 0)  {Typed KG: 894k relations, 9 types};
+\node[box] (kg)    at (6.05, 0)  {Typed KG: 894k relations, 6 types};
 \node[box] (time)  at (8.55, 0)  {Validity intervals, version alignment};
 \node[box, fill=camber!12] (diff)  at (11.05, 0) {Version history: timeline + clause diff};
 \node[lane] at (-0.25, -1.08) {Online: question answering at time $t_q$ (Section~\ref{sec:online})};
@@ -211,7 +211,7 @@ translations, consolidated texts and administrative letters.
 \multicolumn{2}{l}{\textbf{Legal QA pairs}} & \multicolumn{2}{l}{\textbf{Legal knowledge graph (web mining)}} \\
 \midrule
 Question--article pairs / questions & 132,424 / 119,007 & Documents / articles (\textit{Điều}) & 148,282 / 981,412 \\
-Passages in the corpus & 68,663 & Typed edges (9 types) & 894,330 \\
+Passages in the corpus & 68,663 & Typed edges (6 types) & 894,057 \\
 Questions with $\geq$2 gold articles & \EdaMultiGold & Clause-level amendment operations & \AmOps \\
 Split v2 train / val / test & 95,231 / 11,891 / 11,885 & QA passages linked to their article & 64.7\% \\
 Test questions whose gold law has changed & \ResNTemporal & Passages with an aligned successor & \ResAlignAccepted \\
@@ -237,7 +237,7 @@ the portal updates them over time.
 number (including old formats such as \texttt{15/CP}), every citation by name and date (``Luật Tổ chức Chính phủ ngày 19
 tháng 6 năm 2015'') and the Constitution are resolved to documents, duplicate numbers are disambiguated by the date
 written next to them, and the sentence decides the type: ``Căn cứ'' lines give \emph{based on}; ``thay thế'' gives
-\emph{replaces}; ``bãi bỏ'' or ``hết hiệu lực'' give \emph{repeals} (or \emph{partially repeals} when an article is
+\emph{replaces}; ``bãi bỏ'' or ``hết hiệu lực'' give \emph{repeals} (marked \emph{partial} when an article is
 named); a sentence that performs ``Sửa đổi, bổ sung'' gives \emph{amends}; passive mentions (``đã được sửa đổi bởi'') are
 only \emph{cites}. Against the portal's own lists on the same documents, any-type precision is 0.76 at recall 0.83
 (Figure~\ref{fig:crawl}b).
@@ -286,13 +286,16 @@ portal's own relation lists, by target document; succession: amends, replaces, r
 \subsection{Knowledge graph}
 \label{sec:kg}
 \textbf{Typed relations.} The portal lists relations from each document's own page, so the direction of a label depends
-on the page (``Văn bản bị thay thế'' vs.\ ``Văn bản thay thế''). We map 26 labels to 9 typed edges \emph{actor$\to$target}
-and verify each direction with issue dates: the actor is newer than the target in 96--100\% of edges per label.
-Figure~\ref{fig:kg}a shows the distribution; succession edges (amends, replaces, repeals, partially repeals) make up
-13.7\% of all edges but decide validity.
+on the page (``Văn bản bị thay thế'' vs.\ ``Văn bản thay thế''). We map 19 labels to six typed edges
+\emph{actor$\to$target} (based on, cites, guides, amends, replaces, repeals) and verify each direction with issue
+dates: the actor is newer than the target in 97--100\% of edges per label. A partial repeal (6,557 edges) is a
+\emph{repeals} edge marked \emph{partial}: it ends some articles but not the document. Labels too rare to matter are
+left out (suspension: 188 edges, interpretation: 85; consolidation links point to consolidated texts, which we exclude).
+Figure~\ref{fig:kg}a shows the distribution; succession edges (amends, replaces, repeals) make up 13.7\% of all edges
+but decide validity.
 
 \textbf{The links decide validity.} An article never says in its own text that it has been superseded; only other
-documents do, through their links. The first replaces or repeals edge that points at a document closes its validity
+documents do, through their links. The first replaces or (full) repeals edge that points at a document closes its validity
 interval, and the candidate successors of an article are found by following amends, replaces and repeals edges (up to
 two hops). The typed link structure is therefore not an add-on to retrieval but the source of the temporal signal:
 Section~\ref{sec:ablation} shows that dropping either family of succession edges lowers retrieval under the current law.
@@ -304,8 +307,8 @@ and recall \KgXrefR{}, and \KgXrefNew{} extracted references are not in the port
 by heading and token containment (64.7\% linked).
 
 \textbf{Link analysis.} Louvain~\citep{blondel2008louvain} on the citation graph (\KgLouvainNodes{} documents) finds
-\KgLouvainComm{} communities with modularity \KgLouvainMod{}; the largest match legal domains (state budget and
-organisation, labour and wages, tax and fees, import--export, land, construction). HITS
+\KgLouvainComm{} communities with modularity \KgLouvainMod{}; the largest match legal domains (state budget,
+labour and wages, tax and fees, organisation and civil service, import--export, land and prices). HITS
 authorities~\citep{kleinberg1999hits} are the framework laws on local government, on legal normative documents and on
 the state budget.
 
@@ -329,7 +332,7 @@ drive the version history of the demo.
 \addplot[fill=cblue!60, draw=none] coordinates {\KgEdgeCoords};
 \end{axis}
 \end{tikzpicture}\\
-{\footnotesize (a) Typed relations (894,330 edges)}
+{\footnotesize (a) Typed relations (894,057 edges)}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.49\linewidth}\centering
 \begin{tikzpicture}
@@ -344,8 +347,8 @@ drive the version history of the demo.
 \end{tikzpicture}\\
 {\footnotesize (b) Clause-level amendment operations (\AmOps)}
 \end{minipage}
-\caption{\textbf{What the portal tells us.} (a) Edge types of the knowledge graph; succession edges (amends, replaces,
-repeals, partially repeals) decide validity. (b) Operations parsed from amending documents.}
+\caption{\textbf{What the portal tells us.} (a) The six edge types of the knowledge graph; succession edges (amends,
+replaces, repeals) decide validity. (b) Operations parsed from amending documents.}
 \label{fig:kg}
 \end{figure}
 

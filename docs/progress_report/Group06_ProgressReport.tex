@@ -140,7 +140,7 @@ vbpl.vn portal (171,556 documents; its API is closed to robots), which we parse 
 \multicolumn{2}{l}{\textbf{Legal QA pairs}} & \multicolumn{2}{l}{\textbf{Legal knowledge graph (web mining)}} \\
 \midrule
 Question--article pairs / questions & 132,424 / 119,007 & Documents / articles (\textit{Điều}) & 148,282 / 981,412 \\
-Passages in the corpus & 68,663 & Typed edges (9 types) & 894,330 \\
+Passages in the corpus & 68,663 & Typed edges (6 types) & 894,057 \\
 Questions with $\geq$2 gold articles & 10.1\% & Clause-level amendments extracted & 38,344 \\
 Split v2 train / val / test (no duplicate text) & 95,231 / 11,891 / 11,885 & QA passages linked to their article & 64.7\% \\
 Test questions whose gold law has changed & \ResNTemporal & Successor articles added to the corpus & 116,553 chunks \\
@@ -165,7 +165,7 @@ Test questions whose gold law has changed & \ResNTemporal & Successor articles a
 \node[lane] at (-0.25, 0.82) {Offline: web mining};
 \node[box] (crawl) at (1.05, 0)  {vbpl.vn crawl\\148k documents};
 \node[box] (ie)    at (3.55, 0)  {Articles, cross-refs, amendments};
-\node[box] (kg)    at (6.05, 0)  {Typed KG: 894k relations, 9 types};
+\node[box] (kg)    at (6.05, 0)  {Typed KG: 894k relations, 6 types};
 \node[box] (time)  at (8.55, 0)  {Validity intervals, version alignment};
 \node[box, fill=camber!12] (diff)  at (11.05, 0) {Version history: timeline + clause diff};
 \node[lane] at (-0.25, -1.08) {Online: question answering at time $t_q$};
@@ -207,10 +207,10 @@ at the question time $t_q$ move down, their newer versions move up, and Qwen3-4B
 \label{fig:align}
 \vspace{-4mm}
 \end{wrapfigure}
-\textbf{Knowledge graph.} We map 26 portal relation labels to 9 typed edges \emph{actor$\to$target}, checking each
-direction with issue dates (the actor is newer in 96--100\% of edges per label), split the HTML into articles and extract
-references with rules (P/R 0.63/0.51 against the portal's incomplete lists, plus 215,573 references it does not list).
-Louvain finds 151 communities (modularity 0.58) that match legal domains.
+\textbf{Knowledge graph.} We map 19 portal relation labels to 6 typed edges \emph{actor$\to$target}, checking each
+direction with issue dates (the actor is newer in 97--100\% of edges per label), split the HTML into articles and extract
+references with rules (P/R 0.63/0.51 against the portal's incomplete lists, plus 215,672 references it does not list).
+Louvain finds 150 communities (modularity 0.58) that match legal domains.
 
 \textbf{Temporal layer.} A passage is \emph{stale} at $t_q$ if its document is not in force, or if a document that
 amends, replaces or repeals it has an article aligned with it: a gradient-boosting classifier on pair features

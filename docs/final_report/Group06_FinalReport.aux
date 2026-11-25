@@ -35,8 +35,8 @@
 \citation{kuhn1955hungarian}
 \@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces \textbf  {Crawler evaluation} on 242{} documents present in both the public crawl and our crawl. (a) Accuracy of each metadata field and of the article split. (b) Relations extracted from the text against the portal's own relation lists, by target document; succession: amends, replaces, repeals.}}{4}{figure.3}\protected@file@percent }
 \newlabel{fig:crawl}{{3}{4}{\textbf {Crawler evaluation} on \ParserDocs {} documents present in both the public crawl and our crawl. (a) Accuracy of each metadata field and of the article split. (b) Relations extracted from the text against the portal's own relation lists, by target document; succession: amends, replaces, repeals}{figure.3}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces \textbf  {What the portal tells us.} (a) Edge types of the knowledge graph; succession edges (amends, replaces, repeals, partially repeals) decide validity. (b) Operations parsed from amending documents.}}{4}{figure.4}\protected@file@percent }
-\newlabel{fig:kg}{{4}{4}{\textbf {What the portal tells us.} (a) Edge types of the knowledge graph; succession edges (amends, replaces, repeals, partially repeals) decide validity. (b) Operations parsed from amending documents}{figure.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces \textbf  {What the portal tells us.} (a) The six edge types of the knowledge graph; succession edges (amends, replaces, repeals) decide validity. (b) Operations parsed from amending documents.}}{4}{figure.4}\protected@file@percent }
+\newlabel{fig:kg}{{4}{4}{\textbf {What the portal tells us.} (a) The six edge types of the knowledge graph; succession edges (amends, replaces, repeals) decide validity. (b) Operations parsed from amending documents}{figure.4}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Temporal layer}{4}{subsection.2.4}\protected@file@percent }
 \newlabel{sec:temporal}{{2.4}{4}{Temporal layer}{subsection.2.4}{}}
 \citation{qwen3}
@@ -46,13 +46,11 @@
 \newlabel{fig:align}{{5}{5}{\textbf {Version alignment.} (a) Classifier probability of the \ResAlignArtPairs {} candidate (old, new) article pairs; one-to-one matching keeps \ResAlignArtAccepted {} pairs above the threshold (dashed). (b) Drop in test accuracy when a feature is shuffled}{figure.5}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Online question answering}{5}{subsection.2.5}\protected@file@percent }
 \newlabel{sec:online}{{2.5}{5}{Online question answering}{subsection.2.5}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {3}Training}{5}{section.3}\protected@file@percent }
-\newlabel{sec:training}{{3}{5}{Training}{section.3}{}}
 \citation{henderson2017mnrl}
 \@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces \textbf  {Fine-tuning setup.} Both models: one epoch, bf16, DDP on 2$\times $H200, linear schedule with 10\% warm-up, seed 42, best checkpoint on validation.}}{6}{table.2}\protected@file@percent }
 \newlabel{tab:train}{{2}{6}{\textbf {Fine-tuning setup.} Both models: one epoch, bf16, DDP on 2$\times $H200, linear schedule with 10\% warm-up, seed 42, best checkpoint on validation}{table.2}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces \textbf  {Retrieval} (11,885 test questions). \emph  {Left:} retrieval only on the QA corpus (68,663 passages). \emph  {Right:} the extended corpus used by the system (185,216 chunks, also holding the successor articles).}}{6}{table.3}\protected@file@percent }
-\newlabel{tab:retrieval}{{3}{6}{\textbf {Retrieval} (11,885 test questions). \emph {Left:} retrieval only on the QA corpus (68,663 passages). \emph {Right:} the extended corpus used by the system (185,216 chunks, also holding the successor articles)}{table.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Training}{6}{section.3}\protected@file@percent }
+\newlabel{sec:training}{{3}{6}{Training}{section.3}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Validation MRR@10 during fine-tuning (epoch 0: zero-shot).}}{6}{figure.6}\protected@file@percent }
 \newlabel{fig:curves}{{6}{6}{Validation MRR@10 during fine-tuning (epoch 0: zero-shot)}{figure.6}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {4}Main results}{6}{section.4}\protected@file@percent }
@@ -61,30 +59,30 @@
 \@writefile{toc}{\contentsline {paragraph}{Fine-tuning pays off.}{6}{section*.2}\protected@file@percent }
 \expandafter \gdef \csname pgfplots@labelstyle@pl:gm\endcsname {cgreen={\pgfkeysnovalue },thick={\pgfkeysnovalue },mark={*},mark size={1.3pt}}
 \expandafter \gdef \csname pgfplots@show@ref@pl:gm\endcsname {\begingroup \def \pgfplots@draw@image {\def \tikz@plot@handler {\pgfkeys {/pgf/plots/@handler options/.cd, start=\relax , end macro=\relax , point macro=\pgfutil@gobble , jump macro=\relax , special macro=\pgfutil@gobble , point macro=\pgf@plot@line@handler , jump=\global \let \pgf@plotstreampoint \pgf@plot@line@handler@move }\begingroup \escapechar =-1 \edef \pgfplotsplothandlername {\string \pgfplothandlerlineto }\pgfmath@smuggleone \pgfplotsplothandlername \endgroup \def \pgfplotsplothandlerLUAfactory {function(axis, pointmetainputhandler) return pgfplots.GenericPlothandler.new("\pgfplotsplothandlername ", axis,pointmetainputhandler) end}\def \pgfplotsplothandlerLUAvisualizerfactory {pgfplots.defaultPlotVisualizerFactory}}\pgfkeysdef {/pgfplots/legend image code}{\draw [/pgfplots/mesh=false,bar width=3pt,bar shift=0pt,mark repeat=2,mark phase=2,] plot coordinates { (0cm,0cm) (0.3cm,0cm) (0.6cm,0cm)};}\pgfkeysdef {/pgfplots/every legend image post}{}\pgfkeyssetvalue {/pgfplots/mark list fill}{.!80!black}\pgfkeysdef {/pgfplots/every crossref picture}{\pgfkeysalso {baseline,yshift=0.3em}}\pgfplots@show@small@legendplots {cgreen={\pgfkeysnovalue },thick={\pgfkeysnovalue },mark={*},mark size={1.3pt}}{}}\ifpgfpicture \scope [/pgfplots/every crossref picture]\pgfplots@draw@image \endscope \else \expandafter \ifx \csname tikzappendtofigurename\endcsname \relax \else \begingroup \tikzappendtofigurename {_crossref}\fi \tikz [/pgfplots/every crossref picture]{\pgfplots@draw@image }\expandafter \ifx \csname tikzappendtofigurename\endcsname \relax \else \endgroup \fi \fi \endgroup }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces \textbf  {Retrieval} (11,885 test questions). \emph  {Left:} retrieval only on the QA corpus (68,663 passages). \emph  {Right:} the extended corpus used by the system (185,216 chunks, also holding the successor articles).}}{7}{table.3}\protected@file@percent }
+\newlabel{tab:retrieval}{{3}{7}{\textbf {Retrieval} (11,885 test questions). \emph {Left:} retrieval only on the QA corpus (68,663 passages). \emph {Right:} the extended corpus used by the system (185,216 chunks, also holding the successor articles)}{table.3}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces \textbf  {Validity signals and ablations} (fine-tuned models, test). ``cur'': gold replaced by its successor if superseded; T: the 1,913{} changed questions; Stale@10: share of the top 10 not in force on 23/11/2026; $\gamma =2${} chosen on validation.}}{7}{table.4}\protected@file@percent }
 \newlabel{tab:abl}{{4}{7}{\textbf {Validity signals and ablations} (fine-tuned models, test). ``cur'': gold replaced by its successor if superseded; T: the \ResNTemporal {} changed questions; Stale@10: share of the top 10 not in force on 23/11/2026; \ResWeights {} chosen on validation}{table.4}{}}
-\newlabel{pl:gm}{{\expandafter\protect\csname pgfplots@show@ref@pl:gm\endcsname}{7}{RQ2: the links decide what is current}{pgfplotslink.4.0}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces \textbf  {Validity signals fix outdated answers.} (a) Beyond $\gamma {=}2$ the penalty also hides useful context. (b) The 1,913{} test questions whose gold article was superseded. (c) Hit@10 when each question is asked the day before its successor took effect (gold: the old article) and on 23/11/2026 (gold: the new one).}}{7}{figure.7}\protected@file@percent }
-\newlabel{fig:results}{{7}{7}{\textbf {Validity signals fix outdated answers.} (a) Beyond $\gamma {=}2$ the penalty also hides useful context. (b) The \ResNTemporal {} test questions whose gold article was superseded. (c) Hit@10 when each question is asked the day before its successor took effect (gold: the old article) and on 23/11/2026 (gold: the new one)}{figure.7}{}}
 \@writefile{toc}{\contentsline {paragraph}{RQ1: validity signals halve outdated results.}{7}{section*.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Ablation studies}{7}{subsection.4.1}\protected@file@percent }
 \newlabel{sec:ablation}{{4.1}{7}{Ablation studies}{subsection.4.1}{}}
 \@writefile{toc}{\contentsline {paragraph}{A moderate penalty is enough.}{7}{section*.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{RQ2: the links decide what is current.}{7}{section*.5}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Right before and after the change.}{7}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{RQ3: better answers, confirmed by two judges.}{7}{section*.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Fewer false alarms, at a price.}{7}{section*.8}\protected@file@percent }
 \bibdata{references}
 \bibcite{blondel2008louvain}{{1}{2008}{{Blondel et~al.}}{{Blondel, Guillaume, Lambiotte, and Lefebvre}}}
+\bibcite{chen2024bgem3}{{2}{2024}{{Chen et~al.}}{{Chen, Xiao, Zhang, Luo, Lian, and Liu}}}
+\bibcite{chen2021timeqa}{{3}{2021}{{Chen et~al.}}{{Chen, Wang, and Wang}}}
+\newlabel{pl:gm}{{\expandafter\protect\csname pgfplots@show@ref@pl:gm\endcsname}{8}{RQ2: the links decide what is current}{pgfplotslink.4.0}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces \textbf  {Validity signals fix outdated answers.} (a) Beyond $\gamma {=}2$ the penalty also hides useful context. (b) The 1,913{} test questions whose gold article was superseded. (c) Hit@10 when each question is asked the day before its successor took effect (gold: the old article) and on 23/11/2026 (gold: the new one).}}{8}{figure.7}\protected@file@percent }
+\newlabel{fig:results}{{7}{8}{\textbf {Validity signals fix outdated answers.} (a) Beyond $\gamma {=}2$ the penalty also hides useful context. (b) The \ResNTemporal {} test questions whose gold article was superseded. (c) Hit@10 when each question is asked the day before its successor took effect (gold: the old article) and on 23/11/2026 (gold: the new one)}{figure.7}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces \textbf  {Where the system still fails.} (a) Notice rules on validation; points: Jaccard threshold 0.6--1.0, circle: chosen. (b) Causes of the 46{} incorrect answers; the first three had the gold article in context.}}{8}{figure.8}\protected@file@percent }
 \newlabel{fig:notice}{{8}{8}{\textbf {Where the system still fails.} (a) Notice rules on validation; points: Jaccard threshold 0.6--1.0, circle: chosen. (b) Causes of the \FmWrong {} incorrect answers; the first three had the gold article in context}{figure.8}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces \textbf  {Qwen3-4B answers} on 170{} questions (100 stable, 50 changed, 20 out of scope), graded by two LLM judges. Time-aware RAG is the most correct under both judges, especially on changed questions. Without retrieval the model cites nothing.}}{8}{figure.9}\protected@file@percent }
-\newlabel{fig:answers}{{9}{8}{\textbf {Qwen3-4B answers} on \ResNAns {} questions (100 stable, 50 changed, 20 out of scope), graded by two LLM judges. Time-aware RAG is the most correct under both judges, especially on changed questions. Without retrieval the model cites nothing}{figure.9}{}}
-\@writefile{toc}{\contentsline {paragraph}{RQ3: better answers, confirmed by two judges.}{8}{section*.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Fewer false alarms, at a price.}{8}{section*.8}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Errors come from reading, not retrieval.}{8}{section*.9}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {5}Conclusion}{8}{section.5}\protected@file@percent }
 \newlabel{sec:conclusion}{{5}{8}{Conclusion}{section.5}{}}
-\bibcite{chen2024bgem3}{{2}{2024}{{Chen et~al.}}{{Chen, Xiao, Zhang, Luo, Lian, and Liu}}}
-\bibcite{chen2021timeqa}{{3}{2021}{{Chen et~al.}}{{Chen, Wang, and Wang}}}
 \bibcite{friedman2001gbm}{{4}{2001}{{Friedman}}{{}}}
 \bibcite{henderson2017mnrl}{{5}{2017}{{Henderson et~al.}}{{Henderson, Al-Rfou, Strope, Sung, Luk{\'a}cs, Guo, Kumar, Miklos, and Kurzweil}}}
 \bibcite{karpukhin2020dpr}{{6}{2020}{{Karpukhin et~al.}}{{Karpukhin, O{\u {g}}uz, Min, Lewis, Wu, Edunov, Chen, and Yih}}}
@@ -99,6 +97,8 @@
 \bibcite{qwen3}{{15}{2025}{{Qwen Team}}{{}}}
 \bibcite{rabelo2022coliee}{{16}{2022}{{Rabelo et~al.}}{{Rabelo, Goebel, Kim, Kano, Yoshioka, and Satoh}}}
 \bibcite{reimers2019sbert}{{17}{2019}{{Reimers \& Gurevych}}{{Reimers and Gurevych}}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces \textbf  {Qwen3-4B answers} on 170{} questions (100 stable, 50 changed, 20 out of scope), graded by two LLM judges. Time-aware RAG is the most correct under both judges, especially on changed questions. Without retrieval the model cites nothing.}}{9}{figure.9}\protected@file@percent }
+\newlabel{fig:answers}{{9}{9}{\textbf {Qwen3-4B answers} on \ResNAns {} questions (100 stable, 50 changed, 20 out of scope), graded by two LLM judges. Time-aware RAG is the most correct under both judges, especially on changed questions. Without retrieval the model cites nothing}{figure.9}{}}
 \bibcite{robertson2009bm25}{{18}{2009}{{Robertson \& Zaragoza}}{{Robertson and Zaragoza}}}
 \bibcite{son2024synthetic}{{19}{2024}{{Son et~al.}}{{Son, Hieu, An, and Sang}}}
 \bibcite{zhang2021situatedqa}{{20}{2021}{{Zhang \& Choi}}{{Zhang and Choi}}}

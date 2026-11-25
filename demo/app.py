@@ -162,14 +162,19 @@ if "last" in st.session_state:
     else:
         top = res[~res.stale].assign(_a=res.aid.astype(str).str.split("~").str[0]).drop_duplicates("_a").head(N_SOURCES)
         items = [(k, lg.corpus.iloc[int(r.row)], False) for k, r in enumerate(top.itertuples(), start=1)]
+    groups = {}  # one line per article; chunks of the same article share it
     for k, r, stale in items:
+        key = (str(r.so_ky_hieu), art_of(r.aid), stale) if isinstance(r.so_ky_hieu, str) else (f"row{k}", "?", stale)
+        groups.setdefault(key, []).append((k, r))
+    for (_, art, stale), members in groups.items():
+        r = members[0][1]
+        ks = ", ".join(str(k) for k, _ in members)
         name = doc_name(str(r.so_ky_hieu), r.loai_van_ban) if isinstance(r.so_ky_hieu, str) else "Unlinked passage"
         if stale:
-            status = f"<span class='old'>older version, no longer in force since {fmt_date(r.valid_to)}</span>" \
-                if pd.notna(r.valid_to) else "<span class='old'>older version</span>"
+            status = "<span class='old'>older version, since replaced</span>"
         else:
             status = f"<span class='ok'>in force since {fmt_date(r.valid_from)}</span>"
-        st.markdown(f"<div class='src'>[{k}] <b>{html.escape(name)}</b>, Art. {art_of(r.aid)} · {status}</div>",
+        st.markdown(f"<div class='src'>[{ks}] <b>{html.escape(name)}</b>, Art. {art} · {status}</div>",
                     unsafe_allow_html=True)
         with st.expander("Original text (Vietnamese)", expanded=False):
-            st.text(str(r.text)[:3000])
+            st.text("\n…\n".join(str(m.text)[:3000] for _, m in members))

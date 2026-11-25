@@ -36,7 +36,7 @@ def main() -> None:
     # ---------------- knowledge graph
     kg = load(d / "data_kg_kg_stats.json")
     names = {"based_on": "based on", "cites": "cites", "repeals": "repeals", "guides": "guides", "replaces": "replaces",
-             "amends": "amends", "partially_repeals": "part.\\ repeals", "suspends": "suspends", "interprets": "interprets"}
+             "amends": "amends"}
     et = sorted(kg["edge_types"].items(), key=lambda x: -x[1])
     L.append(M("KgEdgeSyms", ",".join(k.replace("_", "") for k, _ in et)))
     L.append(M("KgEdgeLabels", ",".join("{" + names[k] + "}" for k, _ in et)))
