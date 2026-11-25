@@ -34,9 +34,12 @@ EXCLUDED_TYPES = {
     "Thông báo", "Điều ước quốc tế", "Hướng dẫn", "Kế hoạch", "Báo cáo", "Chương trình",
 }
 
-# Relation label -> (canonical type, direction). direction "fwd": doc_id acts on other_doc_id;
+# Relation label -> (canonical type, direction[, partial]). direction "fwd": doc_id acts on other_doc_id;
 # "rev": other_doc_id acts on doc_id. Directions were checked against issue dates
 # (actor is newer in >= 98% of edges for every label used here).
+# Six edge types. A partial repeal is a "repeals" edge with partial=True (it changes validity of some articles only).
+# Rare portal labels are left out: suspension (188 edges), interpretation (85), consolidation (targets are
+# consolidated texts, which we exclude), correction, publication, translation and "other related" documents.
 RELATION_MAP = {
     "Căn cứ": ("based_on", "fwd"),
     "Văn bản căn cứ": ("based_on", "fwd"),
@@ -50,22 +53,16 @@ RELATION_MAP = {
     "Bãi bỏ": ("repeals", "fwd"),
     "Văn bản hết hiệu lực": ("repeals", "fwd"),
     "Văn bản quy định hết hiệu lực": ("repeals", "rev"),
-    "Văn bản bị hết hiệu lực 1 phần": ("partially_repeals", "fwd"),
-    "Văn bản quy định hết hiệu lực 1 phần": ("partially_repeals", "rev"),
+    "Văn bản bị hết hiệu lực 1 phần": ("repeals", "fwd", True),
+    "Văn bản quy định hết hiệu lực 1 phần": ("repeals", "rev", True),
     "Sửa đổi, bổ sung": ("amends", "fwd"),
     "Văn bản được sửa đổi": ("amends", "fwd"),
     "Văn bản được bổ sung": ("amends", "fwd"),
     "Văn bản sửa đổi": ("amends", "rev"),
     "Văn bản bổ sung": ("amends", "rev"),
-    "Hợp nhất": ("consolidates", "fwd"),
-    "Tạm ngưng hiệu lực": ("suspends", "fwd"),
-    "Đình chỉ thi hành": ("suspends", "fwd"),
-    "Văn bản đình chỉ": ("suspends", "rev"),
-    "Văn bản đình chỉ 1 phần": ("suspends", "rev"),
-    "Giải thích": ("interprets", "fwd"),
 }
 AUTHORITY_TYPES = {"based_on", "cites", "guides"}          # edges used for PageRank / HITS
-SUCCESSION_TYPES = {"replaces", "repeals", "partially_repeals", "amends"}
+SUCCESSION_TYPES = {"replaces", "repeals", "amends"}
 
 BLOCK_TAGS = {"p", "div", "li", "tr", "td", "h1", "h2", "h3", "h4", "h5", "h6", "table", "br"}
 ART_RE = re.compile(r"^[\"“]?\s*Điều\s+(\d+[a-zđ]?)\s*[\.:\-–]?\s*(.*)$", re.IGNORECASE)
@@ -181,12 +178,14 @@ def main() -> None:
         "src": np.where(fwd, rel.doc_id, rel.other_doc_id),
         "dst": np.where(fwd, rel.other_doc_id, rel.doc_id),
         "type": typ.values,
+        "partial": rel.relationship.map(lambda r: len(RELATION_MAP[r]) > 2).values,
         "label": rel.relationship.values,
     })
     edges = edges[edges.src.isin(doc_ids) & edges.dst.isin(doc_ids) & (edges.src != edges.dst)]
-    edges = edges.drop_duplicates(["src", "dst", "type"]).reset_index(drop=True)
+    edges = edges.drop_duplicates(["src", "dst", "type", "partial"]).reset_index(drop=True)
     stats["edges"] = len(edges)
     stats["edge_types"] = edges.type.value_counts().to_dict()
+    stats["partial_repeal_edges"] = int(edges.partial.sum())
     edges.to_parquet(out / "edges.parquet", index=False)
     print(f"[{time.time()-t0:.0f}s] {len(edges)} canonical edges", flush=True)
 

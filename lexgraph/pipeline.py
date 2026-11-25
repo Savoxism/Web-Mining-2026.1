@@ -19,7 +19,7 @@ import pandas as pd
 import torch
 
 from lexgraph.query import expand_query
-from lexgraph.temporal import chunk_article, in_force
+from lexgraph.temporal import SUCCESSION_TYPES, chunk_article, in_force
 
 GRAPH_TYPES = {"guides", "based_on", "cites"}
 
@@ -88,7 +88,7 @@ class LexGraph:
             self.adj[s].add(d)
             self.adj[d].add(s)
         # direct succession edge types between (successor doc, old doc), for edge-type ablations
-        se = edges[edges.type.isin({"amends", "replaces", "repeals", "partially_repeals"}) & edges.dst.isin(present)]
+        se = edges[edges.type.isin(SUCCESSION_TYPES) & edges.dst.isin(present)]
         self.pair_types = defaultdict(set)
         for s, d, ty in zip(se.src.values, se.dst.values, se.type.values):
             self.pair_types[(s, d)].add(ty)

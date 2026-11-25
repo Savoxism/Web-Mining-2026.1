@@ -6,8 +6,16 @@ import numpy as np
 import pandas as pd
 
 EXPIRED_STATUSES = {"Hết hiệu lực toàn bộ", "Ngưng hiệu lực", "Không còn phù hợp"}
-SUCCESSION_TYPES = {"replaces", "repeals", "partially_repeals", "amends"}
+EDGE_TYPES = ["based_on", "cites", "guides", "amends", "replaces", "repeals"]
+SUCCESSION_TYPES = {"replaces", "repeals", "amends"}  # edges whose actor changes the validity of the target
 FULL_EXPIRY_TYPES = {"replaces", "repeals"}
+
+
+def is_partial(edges: pd.DataFrame) -> pd.Series:
+    """True for partial repeals (a "repeals" edge that ends only some articles of the target)."""
+    if "partial" not in edges:
+        return pd.Series(False, index=edges.index)
+    return edges["partial"].fillna(False).astype(bool)
 
 
 def doc_intervals(docs: pd.DataFrame, edges: pd.DataFrame) -> pd.DataFrame:
@@ -20,7 +28,7 @@ def doc_intervals(docs: pd.DataFrame, edges: pd.DataFrame) -> pd.DataFrame:
     d["valid_from"] = d.ngay_co_hieu_luc.fillna(d.ngay_ban_hanh)
     d["valid_to"] = d.ngay_het_hieu_luc
     vf = d.set_index("id").valid_from
-    ex = edges[edges.type.isin(FULL_EXPIRY_TYPES)].copy()
+    ex = edges[edges.type.isin(FULL_EXPIRY_TYPES) & ~is_partial(edges)].copy()
     ex["actor_from"] = ex.src.map(vf)
     first_repeal = ex.groupby("dst").actor_from.min()
     missing = d.valid_to.isna() & d.tinh_trang_hieu_luc.isin(EXPIRED_STATUSES)

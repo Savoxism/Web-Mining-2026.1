@@ -32,7 +32,7 @@ CONFIGS = {
     "main": {"use_explicit": True, "allowed_types": None},
     "no_explicit": {"use_explicit": False, "allowed_types": None},
     "amends_only": {"use_explicit": True, "allowed_types": {"amends"}},
-    "replaces_repeals_only": {"use_explicit": True, "allowed_types": {"replaces", "repeals", "partially_repeals"}},
+    "replaces_repeals_only": {"use_explicit": True, "allowed_types": {"replaces", "repeals"}},
 }
 
 

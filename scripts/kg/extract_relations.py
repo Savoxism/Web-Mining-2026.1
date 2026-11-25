@@ -117,8 +117,8 @@ def mentions(text: str, res: Resolver, issued=None) -> list[str]:
     return list(dict.fromkeys(out))
 
 
-def extract(title: str, html: str, own_id: str | None, res: Resolver, issued=None) -> list[tuple[str, str]]:
-    """Returns [(document id, relation type)] for one document."""
+def extract(title: str, html: str, own_id: str | None, res: Resolver, issued=None) -> list[tuple[str, str, bool]]:
+    """Returns [(document id, relation type, partial)] for one document; a partial repeal is ("repeals", True)."""
     lines = html_to_lines(html) if html else []
     found: dict[str, set] = {}
 
@@ -166,7 +166,7 @@ def extract(title: str, html: str, own_id: str | None, res: Resolver, issued=Non
     for i, types in found.items():
         for ty in PRIORITY:  # keep the strongest relation per target document
             if ty in types:
-                out.append((i, ty))
+                out.append((i, "repeals", True) if ty == "partially_repeals" else (i, ty, False))
                 break
     return out
 
@@ -186,9 +186,9 @@ def main() -> None:
     rows = []
     for r in pages.itertuples(index=False):
         issued = pd.to_datetime(r.ngay_ban_hanh, errors="coerce")
-        for dst, ty in extract(r.title, r.content_html, r.id, res, None if pd.isna(issued) else issued.date()):
-            rows.append({"src": r.id, "dst": dst, "type": ty})
-    rel = pd.DataFrame(rows, columns=["src", "dst", "type"])
+        for dst, ty, partial in extract(r.title, r.content_html, r.id, res, None if pd.isna(issued) else issued.date()):
+            rows.append({"src": r.id, "dst": dst, "type": ty, "partial": partial})
+    rel = pd.DataFrame(rows, columns=["src", "dst", "type", "partial"])
     stats = {"documents": len(pages), "relations": len(rel), "types": rel.type.value_counts().to_dict() if len(rel) else {}}
 
     if args.evaluate:
@@ -213,8 +213,8 @@ def main() -> None:
         p = set(map(tuple, pred[pred.type.isin(exp)][["src", "dst"]].values))
         ev["expiry_edges"] = {"precision": round(len(g & p) / max(1, len(p)), 4), "recall": round(len(g & p) / max(1, len(g)), 4),
                               "gold": len(g), "pred": len(p)}
-        # typed edges that matter for validity: succession (replaces/repeals/partially_repeals/amends)
-        succ = ["replaces", "repeals", "partially_repeals", "amends"]
+        # typed edges that matter for validity: succession (replaces/repeals/amends)
+        succ = ["replaces", "repeals", "amends"]
         g = set(map(tuple, gold[gold.type.isin(succ)][["src", "dst"]].values))
         p = set(map(tuple, pred[pred.type.isin(succ)][["src", "dst"]].values))
         ev["succession_edges"] = {"precision": round(len(g & p) / max(1, len(p)), 4), "recall": round(len(g & p) / max(1, len(g)), 4),

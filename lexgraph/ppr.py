@@ -15,7 +15,7 @@ import scipy.sparse as sp
 import torch
 
 DEFAULT_TYPE_WEIGHTS = {"guides": 1.0, "based_on": 0.5, "cites": 0.5, "amends": 1.0, "replaces": 1.0,
-                        "repeals": 0.5, "partially_repeals": 0.5}
+                        "repeals": 0.5}
 
 
 class DocGraph:

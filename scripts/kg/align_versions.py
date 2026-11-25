@@ -30,6 +30,7 @@ from sentence_transformers import CrossEncoder
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from lexgraph.temporal import is_partial  # noqa: E402
 
 JUDGE = """You are checking a legal version alignment between Vietnamese legal articles. Reply with a JSON object only.
 Old article:
@@ -74,6 +75,7 @@ def main() -> None:
     rows_of_aid = C.groupby("aid").text.apply(lambda x: "\n".join(x.tolist()[:3])).to_dict()
     dtype = pd.read_parquet(td / "docs_temporal.parquet").set_index("id").loai_van_ban
     E = pd.read_parquet(kg / "edges.parquet")
+    E = E.assign(type=np.where(is_partial(E), "partially_repeals", E.type))  # feature keeps full / partial apart
     pair_type = E[E.type.isin(["amends", "replaces", "repeals", "partially_repeals"])].groupby(["src", "dst"]).type.apply(set).to_dict()
     ops = pd.read_parquet(kg / "amendments.parquet", columns=["amend_doc", "target_aid"])
     op_pairs = set(zip(ops.amend_doc, ops.target_aid))

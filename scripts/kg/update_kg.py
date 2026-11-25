@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_amendments import clause_text, parse_doc  # noqa: E402
 from build_kg import EXCLUDED_TYPES, html_to_lines, split_articles  # noqa: E402
 from extract_relations import Resolver, extract  # noqa: E402
-from lexgraph.temporal import chunk_article  # noqa: E402
+from lexgraph.temporal import FULL_EXPIRY_TYPES, SUCCESSION_TYPES, chunk_article, is_partial  # noqa: E402
 
 DOC_COLS = ["id", "so_ky_hieu", "title", "loai_van_ban", "tinh_trang_hieu_luc", "valid_from", "valid_to",
             "pagerank", "authority", "community"]
@@ -84,11 +84,11 @@ def main() -> None:
     rel = []
     for r in pages.itertuples(index=False):
         issued = pd.to_datetime(r.ngay_ban_hanh, errors="coerce")
-        for dst, ty in extract(r.title, r.content_html, r.id, res, None if pd.isna(issued) else issued.date()):
-            rel.append({"src": r.id, "dst": dst, "type": ty, "label": "extracted"})
-    rel = pd.DataFrame(rel, columns=["src", "dst", "type", "label"])
+        for dst, ty, partial in extract(r.title, r.content_html, r.id, res, None if pd.isna(issued) else issued.date()):
+            rel.append({"src": r.id, "dst": dst, "type": ty, "partial": partial, "label": "extracted"})
+    rel = pd.DataFrame(rel, columns=["src", "dst", "type", "partial", "label"])
     edges = pd.read_parquet(kg / "edges.parquet")
-    edges_live = pd.concat([edges, rel], ignore_index=True).drop_duplicates(["src", "dst", "type"])
+    edges_live = pd.concat([edges, rel], ignore_index=True).drop_duplicates(["src", "dst", "type", "partial"])
     stats["new_edges"] = len(rel)
     stats["new_edge_types"] = rel.type.value_counts().to_dict() if len(rel) else {}
 
@@ -114,7 +114,7 @@ def main() -> None:
     eff = new_docs.set_index("id").valid_from
     upd = 0
     if len(rel):
-        for r in rel[rel.type.isin(["replaces", "repeals"])].itertuples(index=False):
+        for r in rel[rel.type.isin(FULL_EXPIRY_TYPES) & ~is_partial(rel)].itertuples(index=False):
             f = eff.get(r.src)
             m = docs_live.id == r.dst
             if pd.notna(f) and m.any():
@@ -149,7 +149,7 @@ def main() -> None:
     model.half()
     model.max_seq_length = 512
     succ_old = pd.read_parquet(kg / "temporal" / "successors.parquet")
-    affected = rel[rel.type.isin(["replaces", "repeals", "partially_repeals", "amends"])] if len(rel) else pd.DataFrame(columns=["src", "dst"])
+    affected = rel[rel.type.isin(SUCCESSION_TYPES)] if len(rel) else pd.DataFrame(columns=["src", "dst"])
     qa = corpus[(corpus.source == "qa") & corpus.doc_id.isin(set(affected.dst))]
     new_succ = []
     if len(qa) and len(new_chunks):
