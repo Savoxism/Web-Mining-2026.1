@@ -114,6 +114,16 @@ tr.best td { font-weight: 700; color: var(--accent2); }
 .links td { text-align: left; }
 @media (max-width: 760px) { .grid4 { grid-template-columns: 1fr 1fr; } }
 .links .rel { font-weight: 700; color: var(--accent2); white-space: nowrap; }
+
+/* one type scale for every slide: all content text uses --fs-body, footnotes use --fs-note */
+:root { --fs-body: clamp(16px, min(1.75vw, 3.1vh), 30px); --fs-note: clamp(14px, min(1.4vw, 2.5vh), 24px); }
+p, li, .card p, .card li, table, .bar-row, .step, .chat, .doc, .small, .fstep b, .fstep span, .wm b, .formula,
+.tbd { font-size: var(--fs-body) !important; }
+h3 { font-size: var(--fs-body); }
+.muted.small, p.muted, .legend, .stack { font-size: var(--fs-note) !important; }
+.grid3 .big { font-size: clamp(28px, 3.6vw, 52px); }
+.tag { font-size: var(--fs-note) !important; }
+.card > b { display: block; font-family: system-ui, sans-serif; font-size: var(--fs-body); margin-bottom: .3em; }
 </style>
 </head>
 <body>
@@ -173,15 +183,15 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <h2>What exists, and the gap we fill</h2>
   <div class="grid3">
     <div class="card"><b>Retrieval-augmented QA</b>
-      <p class="small">RAG grounds an LLM on retrieved passages (Lewis et al., 2020). Dense retrievers, such as DPR (Karpukhin et al., 2020), Sentence-BERT (Reimers &amp; Gurevych, 2019) and BGE-M3 (Chen et al., 2024), beat BM25 (Robertson &amp; Zaragoza, 2009).</p>
-      <p class="small muted">We use: BGE-M3 + reranker; BM25 as a baseline.</p></div>
+      <p class="small">RAG (Lewis et al., 2020). Dense retrievers such as DPR (Karpukhin et al., 2020), Sentence-BERT (Reimers &amp; Gurevych, 2019) and BGE-M3 (Chen et al., 2024) beat BM25.</p>
+      <p class="small muted">We use BGE-M3 + reranker, BM25 as baseline.</p></div>
     <div class="card"><b>Vietnamese legal retrieval</b>
-      <p class="small">Fine-tuning on legal QA pairs with semi-hard negatives (Le et al., 2025) or synthetic data (Son et al., 2024) gives the best results.</p>
-      <p class="small muted">We use: semi-hard negatives to fine-tune both models.</p></div>
-    <div class="card"><b>Legal IR and time-sensitive QA</b>
-      <p class="small">COLIEE treats statutes as fixed (Rabelo et al., 2022). TimeQA (Chen et al., 2021), SituatedQA (Zhang &amp; Choi, 2021) and StreamingQA (Liška et al., 2022) handle time, but only for open-domain text.</p></div>
+      <p class="small">Fine-tuning with semi-hard negatives (Le et al., 2025) or synthetic data (Son et al., 2024).</p>
+      <p class="small muted">We use semi-hard negatives.</p></div>
+    <div class="card"><b>Legal IR, time-sensitive QA</b>
+      <p class="small">COLIEE treats statutes as fixed (Rabelo et al., 2022). TimeQA, SituatedQA and StreamingQA (2021–22) model time, but in open-domain text.</p></div>
   </div>
-  <div class="card" style="margin-top:3vh;border-left:5px solid var(--accent)"><b>The gap.</b> No legal QA system checks whether the article it retrieves is still in force. For Vietnamese law, that information is not in the article: it sits in the amending documents and in the links between pages on the legal portal. <b>We mine it from the web.</b></div>
+  <div class="card" style="margin-top:3vh;border-left:5px solid var(--accent)"><p class="small" style="margin:0"><b>The gap:</b> no legal QA system checks whether a retrieved article is still in force. That fact is not in the article but in amending documents and portal links, so <b>we mine it from the web</b>.</p></div>
 </section>
 
 <!-- 4 Data -->
@@ -215,17 +225,17 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <h2>A polite, incremental crawler</h2>
   <div class="grid2">
     <div class="flow">
-      <div class="fstep"><div class="n">1</div><div><b>Read the sitemap</b><span>lists every page and its last-modified date</span></div></div>
+      <div class="fstep"><div class="n">1</div><div><b>Read the sitemap</b><span>every page + last-modified date</span></div></div>
       <div class="fstep"><div class="n">2</div><div><b>Select</b><span>only new or changed document pages</span></div></div>
-      <div class="fstep"><div class="n">3</div><div><b>Fetch politely</b><span>obey robots.txt, ≥ 1 s between requests, cache every page</span></div></div>
+      <div class="fstep"><div class="n">3</div><div><b>Fetch politely</b><span>robots.txt, ≥ 1 s apart, cached</span></div></div>
       <div class="fstep"><div class="n">4</div><div><b>Parse the page</b><span>number, title, type, dates, validity status</span></div></div>
-      <div class="fstep"><div class="n">5</div><div><b>Update the graph</b><span>add new links; close documents that were replaced</span></div></div>
+      <div class="fstep"><div class="n">5</div><div><b>Update the graph</b><span>new links; close replaced documents</span></div></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:1.6vh">
-      <div class="card stat"><div class="big">978</div><p class="small" style="margin:0">document pages parsed from 1,087 requests, <b>0</b> blocked by robots.txt</p></div>
-      <div class="card stat"><div class="big">≥ 97.8%</div><p class="small" style="margin:0">parser accuracy on number, title, type and dates (242 documents checked against the public crawl)</p></div>
-      <div class="card stat"><div class="big">367</div><p class="small" style="margin:0">older documents marked <b>no longer in force</b> by the 645 new ones</p></div>
-      <p class="small muted" style="margin:0">Why read links from the text? The portal's link lists sit behind its API, which robots.txt forbids. <b>Typed links</b> of the new documents ("Căn cứ…", "thay thế", "bãi bỏ"), read from their text: precision 0.76 / recall 0.83 against the portal's lists for the same documents.</p>
+      <div class="card stat"><div class="big">978</div><p class="small" style="margin:0">pages parsed (1,087 requests), <b>0</b> blocked</p></div>
+      <div class="card stat"><div class="big">≥ 97.8%</div><p class="small" style="margin:0">parser accuracy on number, title, type, dates</p></div>
+      <div class="card stat"><div class="big">367</div><p class="small" style="margin:0">old documents closed by 645 new ones</p></div>
+      <p class="small muted" style="margin:0">Link lists sit behind the portal's API (forbidden by robots.txt), so we read <b>typed links</b> from the text ("Căn cứ", "thay thế", "bãi bỏ"): precision 0.76 / recall 0.83.</p>
     </div>
   </div>
 </section>
@@ -237,28 +247,28 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <div class="grid2">
     <div>
       <table class="small links">
-        <thead><tr><th>Link on the portal</th><th>What it means for validity</th></tr></thead>
+        <thead><tr><th>Link (decrees)</th><th>Validity</th></tr></thead>
         <tbody>
-          <tr><td>Decree 123/2021 <span class="rel">amends →</span> Decree 100/2019</td><td>some clauses change from 01/01/2022</td></tr>
-          <tr><td>Decree 168/2024 <span class="rel">replaces →</span> Decree 100/2019</td><td>the old decree stops on 01/01/2025</td></tr>
-          <tr><td>Circular <span class="rel">guides →</span> Law</td><td>context only, validity unchanged</td></tr>
+          <tr><td>123/2021 <span class="rel">amends →</span> 100/2019</td><td>clauses change</td></tr>
+          <tr><td>168/2024 <span class="rel">replaces →</span> 100/2019</td><td>old one ends</td></tr>
+          <tr><td>Circular <span class="rel">guides →</span> Law</td><td>no change</td></tr>
         </tbody>
       </table>
       <ul class="small" style="margin-top:2vh">
-        <li><b>Graph:</b> 148,282 documents, 981,412 articles, 894,057 links of 6 types (cleaned from 19 portal labels, directions checked against issue dates). A partial repeal is a repeals link marked <i>partial</i>; labels with a few hundred links (suspension, interpretation) are left out.</li>
-        <li><b>Key point:</b> an article never says in its own text that it was replaced; only the links of <i>other</i> documents do.</li>
-        <li><b>Link analysis:</b> PageRank ranks the Constitutions first; Louvain finds 150 communities that match legal domains (budget, labour, tax).</li>
+        <li>148,282 documents, 894,057 links of 6 types.</li>
+        <li>Only <i>other</i> documents' links say an article was replaced.</li>
+        <li>PageRank: Constitutions first. Louvain: 150 legal domains.</li>
       </ul>
     </div>
     <div class="bars">
       <h3>Six link types (894,057)</h3>
       <div class="bar-row"><span>based_on</span><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div><span>663,907</span></div>
-      <div class="bar-row"><span>repeals (6,557 partial)</span><div class="bar-track"><div class="bar-fill lex" style="width:10.3%"></div></div><span>68,429</span></div>
+      <div class="bar-row"><span>repeals</span><div class="bar-track"><div class="bar-fill lex" style="width:10.3%"></div></div><span>68,429</span></div>
       <div class="bar-row"><span>cites</span><div class="bar-track"><div class="bar-fill" style="width:9.9%"></div></div><span>65,586</span></div>
       <div class="bar-row"><span>guides</span><div class="bar-track"><div class="bar-fill" style="width:6.3%"></div></div><span>41,641</span></div>
       <div class="bar-row"><span>replaces</span><div class="bar-track"><div class="bar-fill lex" style="width:5.5%"></div></div><span>36,829</span></div>
       <div class="bar-row"><span>amends</span><div class="bar-track"><div class="bar-fill lex" style="width:2.7%"></div></div><span>17,665</span></div>
-      <p class="small muted">Red: links that change validity, used by the temporal layer.</p>
+      <p class="small muted">Red: links that change validity. 6,557 repeals are partial.</p>
     </div>
   </div>
 </section>
@@ -268,9 +278,9 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <div class="kicker"><span class="chip content">Web content mining</span>information extraction</div>
   <h2>Reading the text: references and passage linking</h2>
   <div class="grid3" style="margin-bottom:3vh">
-    <div class="card"><div class="big">0.63 / 0.51</div><p class="small">precision / recall of <b>every document mentioned in article bodies</b>, whole corpus, against the portal's lists. Lower than the typed links (0.76 / 0.83, slide 6): bodies mention documents the portal does not list, and the portal lists links never written in a body.</p></div>
-    <div class="card"><div class="big">89.4%</div><p class="small">of 105,307 references like "Article X of Decree Y" resolve to a real article in our graph</p></div>
-    <div class="card"><div class="big">64.7%</div><p class="small">of QA passages (44,408) matched to their source article on the portal</p></div>
+    <div class="card"><div class="big">0.63 / 0.51</div><p class="small">precision / recall of <b>all</b> documents mentioned in article bodies vs the portal's lists (typed links: 0.76 / 0.83)</p></div>
+    <div class="card"><div class="big">89.4%</div><p class="small">of 105,307 "Article X of Decree Y" references resolve to an article</p></div>
+    <div class="card"><div class="big">64.7%</div><p class="small">of 44,408 QA passages linked to their source article</p></div>
   </div>
   <h3>Are the linked passages still valid today?</h3>
   <div class="stack">
@@ -278,7 +288,7 @@ tr.best td { font-weight: 700; color: var(--accent2); }
     <div style="width:32.6%;background:var(--warn)">partly expired 32.6%</div>
     <div style="width:31.3%;background:var(--accent)">fully expired 31.3%</div>
   </div>
-  <p class="small muted">The text also yields 215,672 references that the portal does not list: new links mined from content.</p>
+  <p class="small muted">215,672 extracted references are new: the portal does not list them.</p>
 </section>
 
 <!-- 8 Temporal layer + alignment -->
@@ -292,9 +302,9 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   </div>
   <div class="grid2">
     <ul class="small">
-      <li>For a passage in document $D$, candidate successors are articles in documents that <b>amend, replace or repeal</b> $D$ (up to 2 hops).</li>
-      <li><b>Alignment classifier:</b> a gradient-boosting model decides whether a new article is the successor of an old one, from text similarity, cross-encoder score, word overlap and link type; 2,359 training pairs labelled by an LLM judge; each old article keeps at most one successor.</li>
-      <li>Successor articles are chunked by clause and added to the corpus, so the <b>current</b> law can be retrieved.</li>
+      <li><b>Candidates:</b> articles of documents that <b>amend, replace or repeal</b> $D$ (≤ 2 hops).</li>
+      <li><b>Classifier:</b> gradient boosting on similarity, cross-encoder score, word overlap and link type; 2,359 pairs labelled by an LLM judge; one successor per article.</li>
+      <li><b>Index:</b> successors are added by clause, so the <b>current</b> law can be retrieved.</li>
     </ul>
     <table class="small">
       <tbody>
@@ -380,22 +390,22 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <div class="grid2">
     <div>
       <ul class="small">
-        <li><b>Qwen3-4B</b> on vLLM; context = most relevant clauses of articles in force, the old version of a changed article and its amendments.</li>
-        <li>Prompt rules: answer only from the given articles, cite each claim as [k], refuse when evidence is missing.</li>
-        <li>A notice is allowed only from a <b>verified change fact</b>: the clause asked about differs (fine amounts, or token Jaccard &lt; 0.85) between the old article and its successor, and Qwen3-4B confirms the answer to <i>this</i> question differs.</li>
-        <li>After generation, unsupported notices are removed and missing ones added.</li>
+        <li><b>Context:</b> clauses in force, plus the old version of a changed article.</li>
+        <li><b>Rules:</b> answer only from these articles, cite [k], refuse without evidence.</li>
+        <li><b>Notice</b> only from a <b>verified change</b>: the clause differs (amount, or Jaccard &lt; 0.85) and Qwen3-4B confirms the answer changes.</li>
+        <li>Unsupported notices are removed, missing ones added.</li>
       </ul>
     </div>
     <div>
       <table class="small">
-        <thead><tr><th>Gate (validation)</th><th>False notices ↓</th><th>Recall on real changes ↑</th></tr></thead>
+        <thead><tr><th>Gate</th><th>False ↓</th><th>Recall ↑</th></tr></thead>
         <tbody>
           <tr><td>Wording only</td><td>14.0%</td><td>88.5%</td></tr>
-          <tr class="best"><td><b>+ Qwen3-4B check</b></td><td><b>11.7%</b></td><td><b>82.8%</b></td></tr>
-          <tr><td>+ check with thinking</td><td>8.3%</td><td>59.8%</td></tr>
+          <tr class="best"><td><b>+ Qwen3 check</b></td><td><b>11.7%</b></td><td><b>82.8%</b></td></tr>
+          <tr><td>+ with thinking</td><td>8.3%</td><td>59.8%</td></tr>
         </tbody>
       </table>
-      <p class="small muted" style="margin-top:2vh">300 stable + 150 changed validation questions. About 10% of changed questions get no candidate fact (the old article is not retrieved), which caps recall near 0.90.</p>
+      <p class="small muted" style="margin-top:2vh">Validation: 300 stable + 150 changed questions. Recall is capped near 0.90: 10% of changed questions have no candidate fact.</p>
     </div>
   </div>
 </section>
@@ -407,24 +417,24 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <div class="grid2">
     <div>
       <table>
-        <thead><tr><th>Test MRR@10</th><th>QA corpus</th><th>System corpus</th></tr></thead>
+        <thead><tr><th>MRR@10</th><th>QA</th><th>System</th></tr></thead>
         <tbody>
-          <tr><td>BM25 (pyvi words)</td><td>0.491</td><td>–</td></tr>
-          <tr><td>vietnamese-bi-encoder</td><td>0.557</td><td>–</td></tr>
-          <tr><td>BGE-M3 zero-shot</td><td>0.608</td><td>0.539</td></tr>
-          <tr><td>+ BGE-Reranker zero-shot</td><td>–</td><td>0.624</td></tr>
-          <tr><td>BGE-M3 fine-tuned</td><td>0.725</td><td>0.650</td></tr>
-          <tr class="best"><td><b>+ BGE-Reranker fine-tuned</b></td><td>–</td><td><b>0.704</b></td></tr>
+          <tr><td>BM25</td><td>0.491</td><td>–</td></tr>
+          <tr><td>vi-bi-encoder</td><td>0.557</td><td>–</td></tr>
+          <tr><td>BGE-M3</td><td>0.608</td><td>0.539</td></tr>
+          <tr><td>+ Reranker</td><td>–</td><td>0.624</td></tr>
+          <tr><td>BGE-M3, fine-tuned</td><td>0.725</td><td>0.650</td></tr>
+          <tr class="best"><td><b>+ Reranker, fine-tuned</b></td><td>–</td><td><b>0.704</b></td></tr>
         </tbody>
       </table>
-      <p class="small muted">QA corpus: 68,663 passages. System corpus: 185,216 chunks, adding the successor articles, so it is harder.</p>
+      <p class="small muted">QA: 68,663 passages. System: 185,216 chunks incl. successor articles (harder).</p>
     </div>
     <div>
-      <h3>How we fine-tuned (2×H200, one epoch each)</h3>
+      <h3>Fine-tuning (2×H200, 1 epoch)</h3>
       <ul class="small">
-        <li><b>Semi-hard negatives:</b> from the top 100, skip the first ranks and anything within 0.05 of the positive (avoids unlabelled true answers).</li>
-        <li><b>BGE-M3:</b> multiple-negatives ranking loss, 105,899 pairs, ~25 min.</li>
-        <li><b>BGE-Reranker:</b> binary cross-entropy, 1 positive + 7 negatives mined with the <i>fine-tuned</i> BGE-M3, 445,296 pairs, ~30 min.</li>
+        <li><b>Semi-hard negatives</b> from the top 100, skipping near-duplicates of the answer.</li>
+        <li><b>BGE-M3:</b> MNR loss, 105,899 pairs, ~25 min.</li>
+        <li><b>Reranker:</b> BCE, 7 negatives from the fine-tuned BGE-M3, 445,296 pairs, ~30 min.</li>
       </ul>
     </div>
   </div>
@@ -435,20 +445,20 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <div class="kicker">Results · ablations on 11,885 test questions, law as of 23/11/2026</div>
   <h2>Validity signals halve outdated results</h2>
   <table>
-    <thead><tr><th>System</th><th>Stale@10 ↓</th><th>MRR@10</th><th>MRR@10 on changed questions</th></tr></thead>
+    <thead><tr><th>System</th><th>Stale@10&nbsp;↓</th><th>MRR@10</th><th>MRR@10, changed</th></tr></thead>
     <tbody>
       <tr><td>No time signals</td><td>0.234</td><td>0.667</td><td>0.377</td></tr>
-      <tr class="best"><td><b>+ stale penalty + successor injection (ours)</b></td><td><b>0.125</b></td><td><b>0.681</b></td><td><b>0.486</b></td></tr>
-      <tr><td>+ stale penalty only</td><td>0.127</td><td>0.681</td><td>0.481</td></tr>
-      <tr><td>ours, amends links only</td><td>0.117</td><td>0.677</td><td>0.468</td></tr>
-      <tr><td>ours, replaces / repeals links only</td><td>0.119</td><td>0.678</td><td>0.472</td></tr>
+      <tr class="best"><td><b>Ours: penalty + injection</b></td><td><b>0.125</b></td><td><b>0.681</b></td><td><b>0.486</b></td></tr>
+      <tr><td>Penalty only</td><td>0.127</td><td>0.681</td><td>0.481</td></tr>
+      <tr><td>Ours, amends links only</td><td>0.117</td><td>0.677</td><td>0.468</td></tr>
+      <tr><td>Ours, replaces / repeals only</td><td>0.119</td><td>0.678</td><td>0.472</td></tr>
     </tbody>
   </table>
   <ul class="small" style="margin-top:2vh">
-    <li>All metrics use the <b>current law</b> as the answer: an outdated gold passage is replaced by its successor. Changed questions: the 1,913 whose gold article was superseded.</li>
-    <li>Both link families are needed: either alone loses on changed questions. PageRank added nothing and was dropped.</li>
+    <li>Gold = the <b>current law</b> (an outdated gold passage → its successor). Changed: 1,913 questions.</li>
+    <li>Both link families are needed; PageRank added nothing.</li>
   </ul>
-  <p class="small muted">Scored against the original gold instead, MRR@10 dips from 0.704 to 0.671, because that gold still rewards returning the outdated article.</p>
+  <p class="small muted">Against the original gold, MRR@10 dips 0.704 → 0.671: that gold rewards the outdated article.</p>
 </section>
 
 <!-- 16 Time-travel -->
@@ -457,21 +467,21 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <h2>Same question, before and after the law changed</h2>
   <div class="grid2">
     <div class="bars">
-      <h3>Hit@10 at both dates (1,752 questions)</h3>
+      <h3>Hit@10 at both dates</h3>
       <div class="bar-row"><span>Static RAG</span><div class="bar-track"><div class="bar-fill lex" style="width:5.9%"></div></div><span>0.059</span></div>
       <div class="bar-row"><span>No time signals</span><div class="bar-track"><div class="bar-fill lex" style="width:58.3%"></div></div><span>0.583</span></div>
       <div class="bar-row"><span>LexGraph-VN</span><div class="bar-track"><div class="bar-fill" style="width:65.1%"></div></div><span>0.651</span></div>
     </div>
     <table class="small">
-      <thead><tr><th></th><th>Hit@10 before</th><th>Hit@10 after</th><th>Stale@10 after ↓</th></tr></thead>
+      <thead><tr><th>Hit@10</th><th>Before</th><th>After</th></tr></thead>
       <tbody>
-        <tr><td>Static RAG (QA corpus)</td><td>0.917</td><td>0.060</td><td>0.487</td></tr>
-        <tr><td>Extended corpus, no time</td><td>0.849</td><td>0.620</td><td>0.347</td></tr>
-        <tr class="best"><td>LexGraph-VN</td><td>0.873</td><td>0.679</td><td>0.213</td></tr>
+        <tr><td>Static RAG</td><td>0.917</td><td>0.060</td></tr>
+        <tr><td>No time signals</td><td>0.849</td><td>0.620</td></tr>
+        <tr class="best"><td>LexGraph-VN</td><td>0.873</td><td>0.679</td></tr>
       </tbody>
     </table>
   </div>
-  <p class="small muted">Each question is asked the day before its successor document took effect (gold: the old article) and on 23/11/2026 (gold: the new one). A static system can only ever be right once.</p>
+  <p class="small muted">1,752 questions, each asked the day before its law changed and on 23/11/2026. A static system can be right only once. Stale@10 after the change: 0.487 → 0.213.</p>
 </section>
 
 <!-- 17 Answers -->
@@ -481,23 +491,23 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <div class="grid2">
     <div>
       <table>
-        <thead><tr><th>Judged correct</th><th>gpt-oss-120b</th><th>Qwen3-32B</th></tr></thead>
+        <thead><tr><th>Correct</th><th>gpt-oss</th><th>Qwen3-32B</th></tr></thead>
         <tbody>
           <tr><td>No retrieval</td><td>0.12</td><td>0.17</td></tr>
           <tr><td>Plain RAG</td><td>0.64</td><td>0.65</td></tr>
-          <tr class="best"><td><b>Time-aware RAG (ours)</b></td><td><b>0.69</b></td><td><b>0.77</b></td></tr>
-          <tr><td colspan="3" style="text-align:left"><i>Changed questions only</i></td></tr>
-          <tr><td>Plain RAG → ours</td><td>0.58 → <b>0.66</b></td><td>0.54 → <b>0.80</b></td></tr>
+          <tr class="best"><td><b>Ours</b></td><td><b>0.69</b></td><td><b>0.77</b></td></tr>
+          <tr><td colspan="3" style="text-align:left"><i>Changed questions: plain → ours</i></td></tr>
+          <tr><td></td><td>0.58&nbsp;→&nbsp;<b>0.66</b></td><td>0.54&nbsp;→&nbsp;<b>0.80</b></td></tr>
         </tbody>
       </table>
     </div>
     <div style="display:flex;flex-direction:column;gap:1.6vh">
-      <div class="card stat"><div class="big">0.73</div><p class="small" style="margin:0">of answers that changed get a "law changed" notice</p></div>
+      <div class="card stat"><div class="big">0.73</div><p class="small" style="margin:0">changed answers get a notice</p></div>
       <div class="card stat"><div class="big">0.13</div><p class="small" style="margin:0">false notices on stable questions</p></div>
-      <div class="card stat"><div class="big">95%</div><p class="small" style="margin:0">of out-of-scope questions correctly refused</p></div>
+      <div class="card stat"><div class="big">95%</div><p class="small" style="margin:0">out-of-scope questions refused</p></div>
     </div>
   </div>
-  <p class="small muted">100 stable, 50 changed and 20 out-of-scope test questions. The two judges rank the settings the same way and agree on 79% of labels (Cohen's κ = 0.58).</p>
+  <p class="small muted">Test: 100 stable, 50 changed, 20 out-of-scope questions. Judges: gpt-oss-120b and Qwen3-32B, 79% agreement (κ = 0.58).</p>
 </section>
 
 <!-- 18 Failure modes -->
@@ -515,10 +525,10 @@ tr.best td { font-weight: 700; color: var(--accent2); }
       <div class="bar-row"><span>wrong refusal</span><div class="bar-track"><div class="bar-fill lex" style="width:21.4%"></div></div><span>3</span></div>
     </div>
     <ul class="small">
-      <li><b>33 of 46</b> errors happen with the current gold article in the context: the 4B model picks another clause or amount, states the rule incompletely, or adds content.</li>
-      <li>Only <b>7</b> are retrieval misses, and <b>3</b> cite an outdated source.</li>
-      <li>All <b>7</b> missed change notices had no verified fact: the old article was not retrieved.</li>
-      <li>Next gains: a stronger reader and clause-level citation checks, not retrieval.</li>
+      <li><b>33 of 46</b> errors have the right article in context: the 4B model misreads the clause or amount, or adds content.</li>
+      <li>Only <b>7</b> retrieval misses; <b>3</b> outdated sources.</li>
+      <li><b>7</b> missed notices: the old article was not retrieved.</li>
+      <li>Next: a stronger reader and clause-level citation checks.</li>
     </ul>
   </div>
 </section>
@@ -530,10 +540,10 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <p class="q">"How much is the fine for running a red light on a motorbike?"</p>
   <div class="grid3">
     <div class="card"><h3>Asked 01/06/2021</h3><div class="big" style="font-size:clamp(26px,3.2vw,46px)">0.6–1M VND</div><p class="small">Decree 100/2019, Art. 6, clause 4, point e.</p></div>
-    <div class="card"><h3>Asked 01/06/2023</h3><div class="big" style="font-size:clamp(26px,3.2vw,46px)">0.8–1M VND</div><p class="small">Decree 123/2021 replaced the amount from 01/01/2022; the phrase replacement is applied to the clause.</p></div>
-    <div class="card"><h3>Asked 23/11/2026</h3><div class="big" style="font-size:clamp(26px,3.2vw,46px)">4–6M VND</div><p class="small">Decree 168/2024, Art. 7 (from 01/01/2025), injected as the successor; a note shows "This rule changed on 01/01/2025: 0.8–1M → 4–6M VND".</p></div>
+    <div class="card"><h3>Asked 01/06/2023</h3><div class="big" style="font-size:clamp(26px,3.2vw,46px)">0.8–1M VND</div><p class="small">Decree 123/2021 changed the amount from 01/01/2022.</p></div>
+    <div class="card"><h3>Asked 23/11/2026</h3><div class="big" style="font-size:clamp(26px,3.2vw,46px)">4–6M VND</div><p class="small">Decree 168/2024, Art. 7, plus a "rule changed on 01/01/2025" note.</p></div>
   </div>
-  <p class="small" style="margin-top:2.5vh">Stable rule: <i>"How many days of annual leave does an employee in normal conditions get?"</i> → 12 working days, Labour Code 2019, Art. 113(1), no notice.</p>
+  <p class="small" style="margin-top:2.5vh">Stable rule: <i>"How many days of annual leave?"</i> → 12 working days (Labour Code 2019, Art. 113), no note.</p>
   <div class="pipe" style="margin-top:1vh">
     <span class="tag">one question box + "Law as of" date</span><span class="tag">each source shows since when it is in force</span><span class="tag">verified "rule changed" note with old → new amount</span><span class="tag">clause diff on demand</span>
   </div>
