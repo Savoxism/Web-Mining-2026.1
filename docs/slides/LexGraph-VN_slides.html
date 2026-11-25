@@ -167,6 +167,23 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <p class="small muted" style="margin-top:2.5vh"><b>RQ1</b> How often is the retrieved law outdated, and can link-derived validity fix it? · <b>RQ2</b> Which link types matter? · <b>RQ3</b> Can a small LLM (Qwen3-4B) cite the law and explain changes?</p>
 </section>
 
+<!-- 3b Related work -->
+<section class="slide">
+  <div class="kicker">Related work</div>
+  <h2>What exists, and the gap we fill</h2>
+  <div class="grid3">
+    <div class="card"><b>Retrieval-augmented QA</b>
+      <p class="small">RAG grounds an LLM on retrieved passages (Lewis et al., 2020). Dense retrievers, such as DPR (Karpukhin et al., 2020), Sentence-BERT (Reimers &amp; Gurevych, 2019) and BGE-M3 (Chen et al., 2024), beat BM25 (Robertson &amp; Zaragoza, 2009).</p>
+      <p class="small muted">We use: BGE-M3 + reranker; BM25 as a baseline.</p></div>
+    <div class="card"><b>Vietnamese legal retrieval</b>
+      <p class="small">Fine-tuning on legal QA pairs with semi-hard negatives (Le et al., 2025) or synthetic data (Son et al., 2024) gives the best results.</p>
+      <p class="small muted">We use: semi-hard negatives to fine-tune both models.</p></div>
+    <div class="card"><b>Legal IR and time-sensitive QA</b>
+      <p class="small">COLIEE treats statutes as fixed (Rabelo et al., 2022). TimeQA (Chen et al., 2021), SituatedQA (Zhang &amp; Choi, 2021) and StreamingQA (Liška et al., 2022) handle time, but only for open-domain text.</p></div>
+  </div>
+  <div class="card" style="margin-top:3vh;border-left:5px solid var(--accent)"><b>The gap.</b> No legal QA system checks whether the article it retrieves is still in force. For Vietnamese law, that information is not in the article: it sits in the amending documents and in the links between pages on the legal portal. <b>We mine it from the web.</b></div>
+</section>
+
 <!-- 4 Data -->
 <section class="slide">
   <div class="kicker">Data</div>
@@ -205,10 +222,10 @@ tr.best td { font-weight: 700; color: var(--accent2); }
       <div class="fstep"><div class="n">5</div><div><b>Update the graph</b><span>add new links; close documents that were replaced</span></div></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:1.6vh">
-      <div class="card stat"><div class="big">978</div><p class="small" style="margin:0">pages fetched, <b>0</b> blocked by robots.txt</p></div>
+      <div class="card stat"><div class="big">978</div><p class="small" style="margin:0">document pages parsed from 1,087 requests, <b>0</b> blocked by robots.txt</p></div>
       <div class="card stat"><div class="big">≥ 97.8%</div><p class="small" style="margin:0">parser accuracy on number, title, type and dates (242 documents checked against the public crawl)</p></div>
       <div class="card stat"><div class="big">367</div><p class="small" style="margin:0">older documents marked <b>no longer in force</b> by the 645 new ones</p></div>
-      <p class="small muted" style="margin:0">Why read links from the text? The portal's link lists sit behind its API, which robots.txt forbids. Our text-based links reach precision 0.76 / recall 0.83 against those lists.</p>
+      <p class="small muted" style="margin:0">Why read links from the text? The portal's link lists sit behind its API, which robots.txt forbids. <b>Typed links</b> of the new documents ("Căn cứ…", "thay thế", "bãi bỏ"), read from their text: precision 0.76 / recall 0.83 against the portal's lists for the same documents.</p>
     </div>
   </div>
 </section>
@@ -251,7 +268,7 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <div class="kicker"><span class="chip content">Web content mining</span>information extraction</div>
   <h2>Reading the text: references and passage linking</h2>
   <div class="grid3" style="margin-bottom:3vh">
-    <div class="card"><div class="big">0.63 / 0.51</div><p class="small">precision / recall of document references we extract from the text, checked against the portal's own link lists</p></div>
+    <div class="card"><div class="big">0.63 / 0.51</div><p class="small">precision / recall of <b>every document mentioned in article bodies</b>, whole corpus, against the portal's lists. Lower than the typed links (0.76 / 0.83, slide 6): bodies mention documents the portal does not list, and the portal lists links never written in a body.</p></div>
     <div class="card"><div class="big">89.4%</div><p class="small">of 105,307 references like "Article X of Decree Y" resolve to a real article in our graph</p></div>
     <div class="card"><div class="big">64.7%</div><p class="small">of QA passages (44,408) matched to their source article on the portal</p></div>
   </div>
@@ -383,78 +400,55 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   </div>
 </section>
 
-<!-- 13 Fine-tuning -->
-<section class="slide">
-  <div class="kicker">Training · 2×H200, DDP, one epoch each</div>
-  <h2>Semi-hard negatives, then fine-tune both models</h2>
-  <div class="grid2">
-    <div class="bars">
-      <h3>Validation MRR@10</h3>
-      <div class="bar-row"><span>BGE-M3 zero-shot</span><div class="bar-track"><div class="bar-fill lex" style="width:61.9%"></div></div><span>0.619</span></div>
-      <div class="bar-row"><span>BGE-M3 fine-tuned</span><div class="bar-track"><div class="bar-fill" style="width:74.1%"></div></div><span>0.741</span></div>
-      <div class="bar-row"><span>+ BGE-Reranker zero-shot</span><div class="bar-track"><div class="bar-fill lex" style="width:72.9%"></div></div><span>0.729</span></div>
-      <div class="bar-row"><span>+ BGE-Reranker fine-tuned</span><div class="bar-track"><div class="bar-fill" style="width:80.8%"></div></div><span>0.808</span></div>
-      <p class="small muted">Recall@100 of the bi-encoder: 0.930 → 0.980. The base reranker hurts a fine-tuned retriever; the fine-tuned one adds +0.07.</p>
-    </div>
-    <ul class="small">
-      <li><b>Semi-hard negatives:</b> from the top-100, skip the first ranks and anything within 0.05 of the positive (avoids unlabeled true answers).</li>
-      <li><b>Bi-encoder:</b> multiple-negatives ranking loss, 3 semi-hard negatives, 105,899 pairs, global batch 128, ~25 min.</li>
-      <li><b>Cross-encoder:</b> binary cross-entropy, 1 positive + 7 negatives mined with the <b>fine-tuned</b> bi-encoder, 445,296 pairs, ~30 min.</li>
-    </ul>
-  </div>
-</section>
-
 <!-- 14 Retrieval -->
 <section class="slide">
-  <div class="kicker"><span class="chip ir">Retrieval and ranking</span>results on 11,885 test questions</div>
+  <div class="kicker"><span class="chip ir">Retrieval and ranking</span>fine-tuning · test split, 11,885 questions</div>
   <h2>Dense beats lexical; fine-tuning adds +0.165 MRR@10</h2>
   <div class="grid2">
-    <table class="small">
-      <thead><tr><th>Method</th><th>MRR@10</th><th>R@10</th><th>R@100</th></tr></thead>
-      <tbody>
-        <tr><td colspan="4" style="text-align:left"><i>QA corpus (68,663 passages)</i></td></tr>
-        <tr><td>BM25 (syllables)</td><td>0.471</td><td>0.671</td><td>0.851</td></tr>
-        <tr><td>BM25 (pyvi words)</td><td>0.491</td><td>0.702</td><td>0.880</td></tr>
-        <tr><td>vietnamese-bi-encoder</td><td>0.557</td><td>0.759</td><td>0.903</td></tr>
-        <tr><td>BGE-M3 (zero-shot)</td><td>0.608</td><td>0.804</td><td>0.939</td></tr>
-        <tr class="best"><td>BGE-M3 (fine-tuned)</td><td>0.725</td><td>0.909</td><td>0.985</td></tr>
-        <tr><td colspan="4" style="text-align:left"><i>Extended corpus (185,216 chunks, used by the system)</i></td></tr>
-        <tr><td>BGE-M3 (zero-shot)</td><td>0.539</td><td>0.742</td><td>0.900</td></tr>
-        <tr><td>+ BGE-Reranker (zero-shot)</td><td>0.624</td><td>0.792</td><td>–</td></tr>
-        <tr><td>BGE-M3 (fine-tuned)</td><td>0.650</td><td>0.865</td><td>0.972</td></tr>
-        <tr class="best"><td><b>+ BGE-Reranker (fine-tuned)</b></td><td><b>0.704</b></td><td><b>0.885</b></td><td>–</td></tr>
-      </tbody>
-    </table>
-    <div class="bars">
-      <h3>MRR@10 on the extended corpus</h3>
-      <div class="bar-row"><span>BGE-M3 zero-shot</span><div class="bar-track"><div class="bar-fill lex" style="width:53.9%"></div></div><span>0.539</span></div>
-      <div class="bar-row"><span>+ reranker zero-shot</span><div class="bar-track"><div class="bar-fill lex" style="width:62.4%"></div></div><span>0.624</span></div>
-      <div class="bar-row"><span>BGE-M3 fine-tuned</span><div class="bar-track"><div class="bar-fill" style="width:65%"></div></div><span>0.650</span></div>
-      <div class="bar-row"><span>+ reranker fine-tuned</span><div class="bar-track"><div class="bar-fill" style="width:70.4%"></div></div><span>0.704</span></div>
-      <p class="small">The extended corpus also holds the successor articles, so it is harder than the QA corpus alone.</p>
+    <div>
+      <table>
+        <thead><tr><th>Test MRR@10</th><th>QA corpus</th><th>System corpus</th></tr></thead>
+        <tbody>
+          <tr><td>BM25 (pyvi words)</td><td>0.491</td><td>–</td></tr>
+          <tr><td>vietnamese-bi-encoder</td><td>0.557</td><td>–</td></tr>
+          <tr><td>BGE-M3 zero-shot</td><td>0.608</td><td>0.539</td></tr>
+          <tr><td>+ BGE-Reranker zero-shot</td><td>–</td><td>0.624</td></tr>
+          <tr><td>BGE-M3 fine-tuned</td><td>0.725</td><td>0.650</td></tr>
+          <tr class="best"><td><b>+ BGE-Reranker fine-tuned</b></td><td>–</td><td><b>0.704</b></td></tr>
+        </tbody>
+      </table>
+      <p class="small muted">QA corpus: 68,663 passages. System corpus: 185,216 chunks, adding the successor articles, so it is harder.</p>
+    </div>
+    <div>
+      <h3>How we fine-tuned (2×H200, one epoch each)</h3>
+      <ul class="small">
+        <li><b>Semi-hard negatives:</b> from the top 100, skip the first ranks and anything within 0.05 of the positive (avoids unlabelled true answers).</li>
+        <li><b>BGE-M3:</b> multiple-negatives ranking loss, 105,899 pairs, ~25 min.</li>
+        <li><b>BGE-Reranker:</b> binary cross-entropy, 1 positive + 7 negatives mined with the <i>fine-tuned</i> BGE-M3, 445,296 pairs, ~30 min.</li>
+      </ul>
     </div>
   </div>
 </section>
 
 <!-- 15 Ablations -->
 <section class="slide">
-  <div class="kicker">Results · ablations (fine-tuned models, t = 23/11/2026)</div>
+  <div class="kicker">Results · ablations on 11,885 test questions, law as of 23/11/2026</div>
   <h2>Validity signals halve outdated results</h2>
-  <table class="small">
-    <thead><tr><th>System</th><th>MRR@10</th><th>MRR@10 (current law)</th><th>Stale@10 ↓</th><th>T-MRR@10 (current)</th><th>T-Hit@10 (current)</th></tr></thead>
+  <table>
+    <thead><tr><th>System</th><th>Stale@10 ↓</th><th>MRR@10</th><th>MRR@10 on changed questions</th></tr></thead>
     <tbody>
-      <tr><td>Retriever + re-ranker (no time signals)</td><td>0.704</td><td>0.667</td><td>0.234</td><td>0.377</td><td>0.692</td></tr>
-      <tr class="best"><td><b>+ time signals (stale penalty, successor injection)</b></td><td>0.671</td><td>0.681</td><td>0.125</td><td>0.486</td><td>0.744</td></tr>
-      <tr><td>+ stale penalty only (no successor injection)</td><td>0.671</td><td>0.681</td><td>0.127</td><td>0.481</td><td>0.721</td></tr>
-      <tr><td>+ time signals, amends edges only</td><td>0.676</td><td>0.677</td><td>0.117</td><td>0.468</td><td>0.725</td></tr>
-      <tr><td>+ time signals, replaces / repeals edges only</td><td>0.675</td><td>0.678</td><td>0.119</td><td>0.472</td><td>0.736</td></tr>
+      <tr><td>No time signals</td><td>0.234</td><td>0.667</td><td>0.377</td></tr>
+      <tr class="best"><td><b>+ stale penalty + successor injection (ours)</b></td><td><b>0.125</b></td><td><b>0.681</b></td><td><b>0.486</b></td></tr>
+      <tr><td>+ stale penalty only</td><td>0.127</td><td>0.681</td><td>0.481</td></tr>
+      <tr><td>ours, amends links only</td><td>0.117</td><td>0.677</td><td>0.468</td></tr>
+      <tr><td>ours, replaces / repeals links only</td><td>0.119</td><td>0.678</td><td>0.472</td></tr>
     </tbody>
   </table>
   <ul class="small" style="margin-top:2vh">
-    <li>Plain MRR@10 drops because it still rewards the old article; against the <b>current</b> law every metric improves.</li>
-    <li>Both edge families are needed: each alone loses T-MRR. Graph centrality (PageRank) added nothing and was dropped.</li>
+    <li>All metrics use the <b>current law</b> as the answer: an outdated gold passage is replaced by its successor. Changed questions: the 1,913 whose gold article was superseded.</li>
+    <li>Both link families are needed: either alone loses on changed questions. PageRank added nothing and was dropped.</li>
   </ul>
-  <p class="small muted">T: the 1,913 test questions whose gold article was superseded. "Current law": a superseded gold passage is replaced by its successor.</p>
+  <p class="small muted">Scored against the original gold instead, MRR@10 dips from 0.704 to 0.671, because that gold still rewards returning the outdated article.</p>
 </section>
 
 <!-- 16 Time-travel -->
@@ -485,28 +479,25 @@ tr.best td { font-weight: 700; color: var(--accent2); }
   <div class="kicker">Results · answers of Qwen3-4B, graded by two LLM judges</div>
   <h2>Grounded, time-aware answers</h2>
   <div class="grid2">
-    <div class="bars">
-      <h3 style="margin-top:1.2vh">Judged correct · gpt-oss-120b</h3>
-      <div class="bar-row"><span>No retrieval</span><div class="bar-track"><div class="bar-fill lex" style="width:12.0%"></div></div><span>0.12</span></div>
-      <div class="bar-row"><span>Plain RAG</span><div class="bar-track"><div class="bar-fill lex" style="width:64.0%"></div></div><span>0.64</span></div>
-      <div class="bar-row"><span>Time-aware RAG (ours)</span><div class="bar-track"><div class="bar-fill" style="width:69.3%"></div></div><span>0.69</span></div>
-      <h3 style="margin-top:1.2vh">Judged correct · Qwen3-32B</h3>
-      <div class="bar-row"><span>No retrieval</span><div class="bar-track"><div class="bar-fill lex" style="width:17.3%"></div></div><span>0.17</span></div>
-      <div class="bar-row"><span>Plain RAG</span><div class="bar-track"><div class="bar-fill lex" style="width:64.7%"></div></div><span>0.65</span></div>
-      <div class="bar-row"><span>Time-aware RAG (ours)</span><div class="bar-track"><div class="bar-fill" style="width:77.3%"></div></div><span>0.77</span></div>
+    <div>
+      <table>
+        <thead><tr><th>Judged correct</th><th>gpt-oss-120b</th><th>Qwen3-32B</th></tr></thead>
+        <tbody>
+          <tr><td>No retrieval</td><td>0.12</td><td>0.17</td></tr>
+          <tr><td>Plain RAG</td><td>0.64</td><td>0.65</td></tr>
+          <tr class="best"><td><b>Time-aware RAG (ours)</b></td><td><b>0.69</b></td><td><b>0.77</b></td></tr>
+          <tr><td colspan="3" style="text-align:left"><i>Changed questions only</i></td></tr>
+          <tr><td>Plain RAG → ours</td><td>0.58 → <b>0.66</b></td><td>0.54 → <b>0.80</b></td></tr>
+        </tbody>
+      </table>
     </div>
-    <div class="bars">
-      <h3 style="margin-top:1.2vh">Correct on changed questions</h3>
-      <div class="bar-row"><span>Plain RAG (gpt-oss)</span><div class="bar-track"><div class="bar-fill lex" style="width:58.0%"></div></div><span>0.58</span></div>
-      <div class="bar-row"><span>Ours (gpt-oss)</span><div class="bar-track"><div class="bar-fill" style="width:66.0%"></div></div><span>0.66</span></div>
-      <div class="bar-row"><span>Plain RAG (Qwen3-32B)</span><div class="bar-track"><div class="bar-fill lex" style="width:54.0%"></div></div><span>0.54</span></div>
-      <div class="bar-row"><span>Ours (Qwen3-32B)</span><div class="bar-track"><div class="bar-fill" style="width:80.0%"></div></div><span>0.80</span></div>
-      <h3 style="margin-top:1.2vh">Notices (ours, test)</h3>
-      <div class="bar-row"><span>Notice when the answer changed</span><div class="bar-track"><div class="bar-fill" style="width:73.1%"></div></div><span>0.73</span></div>
-      <div class="bar-row"><span>False notice on stable questions</span><div class="bar-track"><div class="bar-fill lex" style="width:13.0%"></div></div><span>0.13</span></div>
+    <div style="display:flex;flex-direction:column;gap:1.6vh">
+      <div class="card stat"><div class="big">0.73</div><p class="small" style="margin:0">of answers that changed get a "law changed" notice</p></div>
+      <div class="card stat"><div class="big">0.13</div><p class="small" style="margin:0">false notices on stable questions</p></div>
+      <div class="card stat"><div class="big">95%</div><p class="small" style="margin:0">of out-of-scope questions correctly refused</p></div>
     </div>
   </div>
-  <p class="small muted">100 stable, 50 changed and 20 out-of-scope questions (95% correctly refused). The judges rank the settings the same way and agree on 79% of correctness labels (Cohen's κ = 0.58).</p>
+  <p class="small muted">100 stable, 50 changed and 20 out-of-scope test questions. The two judges rank the settings the same way and agree on 79% of labels (Cohen's κ = 0.58).</p>
 </section>
 
 <!-- 18 Failure modes -->
